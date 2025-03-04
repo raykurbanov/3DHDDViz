@@ -1,0 +1,1278 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HDD Bore Geometry Visualization</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.27.1/plotly.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+        background-color: #f8f9fa;
+      }
+      .container {
+        max-width: 1600px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      .header {
+        text-align: center;
+        margin-bottom: 20px;
+        color: #333;
+      }
+      .visualization {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+      #plot3d {
+        width: 100%;
+        height: 600px;
+        background-color: white;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        border-radius: 5px;
+        cursor: pointer;
+      }
+      #plot2d {
+        width: 100%;
+        height: 400px;
+        background-color: white;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        border-radius: 5px;
+        cursor: pointer;
+      }
+      .joint-info {
+        margin-top: 20px;
+        padding: 15px;
+        background-color: white;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        border-radius: 5px;
+      }
+      .joint-info h3 {
+        margin-top: 0;
+        color: #333;
+      }
+      .joint-data {
+        font-family: monospace;
+        white-space: pre;
+        overflow-x: auto;
+        background-color: #f5f5f5;
+        padding: 10px;
+        border-radius: 3px;
+      }
+      .controls {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      button {
+        padding: 8px 15px;
+        background-color: #007bff;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background-color 0.3s;
+      }
+      button:hover {
+        background-color: #0056b3;
+      }
+      .file-upload {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-left: auto;
+      }
+      #fileInput {
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+      .legend {
+        display: flex;
+        gap: 20px;
+        margin-top: 10px;
+        flex-wrap: wrap;
+      }
+      .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .legend-color {
+        width: 20px;
+        height: 20px;
+        border: 1px solid #333;
+      }
+      .footer {
+        margin-top: 30px;
+        text-align: center;
+        color: #666;
+        font-size: 0.8rem;
+      }
+      .joint-details {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 15px;
+        margin-top: 15px;
+      }
+      .detail-card {
+        background-color: #f5f5f5;
+        padding: 15px;
+        border-radius: 5px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+      }
+      .detail-card h4 {
+        margin-top: 0;
+        margin-bottom: 10px;
+        color: #007bff;
+        border-bottom: 1px solid #ddd;
+        padding-bottom: 5px;
+      }
+      .detail-item {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 5px;
+      }
+      .detail-label {
+        font-weight: bold;
+        color: #555;
+      }
+      .detail-value {
+        font-family: monospace;
+      }
+      .notification {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 15px 20px;
+        background-color: #4caf50;
+        color: white;
+        border-radius: 4px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        display: none;
+        z-index: 1000;
+      }
+      .error {
+        background-color: #f44336;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>Horizontal Directional Drilling - Bore Geometry Visualization</h1>
+      </div>
+
+      <div id="notification" class="notification"></div>
+
+      <div class="controls">
+        <button id="resetViewBtn">Reset View</button>
+        <button id="frontViewBtn">Front View</button>
+        <button id="topViewBtn">Top View</button>
+        <button id="toggleJointsBtn">Toggle Joints</button>
+        <div class="file-upload">
+          <input type="file" id="fileInput" accept=".xlsx, .xls" />
+          <button id="importBtn">Import Excel Data</button>
+        </div>
+      </div>
+
+      <div class="legend">
+        <div class="legend-item">
+          <div class="legend-color" style="background-color: #1f77b4"></div>
+          <span>Bore Path</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background-color: #ff7f0e"></div>
+          <span>Centerline</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background-color: red"></div>
+          <span>Selected Joint</span>
+        </div>
+      </div>
+
+      <div class="visualization">
+        <div id="plot3d"></div>
+        <div id="plot2d"></div>
+      </div>
+
+      <div class="joint-info">
+        <h3>Joint Information</h3>
+        <p>Click on a joint in the visualization to view its details.</p>
+        <div id="joint-data" class="joint-data">No joint selected</div>
+
+        <div class="joint-details" id="joint-details">
+          <!-- Joint details will be inserted here by JavaScript -->
+        </div>
+      </div>
+
+      <div class="footer">
+        <p>HDD Bore Geometry Visualization | Created with Plotly.js</p>
+      </div>
+    </div>
+
+    <script>
+      // HDD Bore Data
+      let hddData = [
+        {
+          Joint: 0,
+          Length: 0,
+          Inclination: 77.52,
+          LR: 0.3,
+          RawAzi: 233.67,
+          Away: 0,
+          Elev: 0,
+        },
+        {
+          Joint: 1,
+          Length: 33.44,
+          Inclination: 77.425,
+          LR: 0.38,
+          RawAzi: 233.37,
+          Away: 32.65,
+          Elev: -7.23,
+        },
+        {
+          Joint: 2,
+          Length: 31.5,
+          Inclination: 77.425,
+          LR: 0.26,
+          RawAzi: 232.97,
+          Away: 63.36,
+          Elev: -14.22,
+        },
+        {
+          Joint: 3,
+          Length: 32.55,
+          Inclination: 77.105,
+          LR: 0.08,
+          RawAzi: 233.07,
+          Away: 95.04,
+          Elev: -21.71,
+        },
+        {
+          Joint: 4,
+          Length: 31.93,
+          Inclination: 76.84,
+          LR: 0.07,
+          RawAzi: 233.64,
+          Away: 126.14,
+          Elev: -28.92,
+        },
+        {
+          Joint: 5,
+          Length: 31.35,
+          Inclination: 77.61,
+          LR: 0.21,
+          RawAzi: 233.32,
+          Away: 156.79,
+          Elev: -35.48,
+        },
+        {
+          Joint: 6,
+          Length: 31.85,
+          Inclination: 78.725,
+          LR: 0.19,
+          RawAzi: 233.44,
+          Away: 188.04,
+          Elev: -41.63,
+        },
+        {
+          Joint: 7,
+          Length: 31.23,
+          Inclination: 79.605,
+          LR: 0.18,
+          RawAzi: 233.27,
+          Away: 218.76,
+          Elev: -47.28,
+        },
+        {
+          Joint: 8,
+          Length: 31.9,
+          Inclination: 80.53,
+          LR: 0.18,
+          RawAzi: 233.57,
+          Away: 250.24,
+          Elev: -52.43,
+        },
+        {
+          Joint: 9,
+          Length: 31.25,
+          Inclination: 81.445,
+          LR: 0.25,
+          RawAzi: 233.31,
+          Away: 281.15,
+          Elev: -57.02,
+        },
+        {
+          Joint: 10,
+          Length: 31.3,
+          Inclination: 82.215,
+          LR: 0.28,
+          RawAzi: 233.56,
+          Away: 312.16,
+          Elev: -61.26,
+        },
+        {
+          Joint: 11,
+          Length: 33.9,
+          Inclination: 83.07,
+          LR: 0.39,
+          RawAzi: 233.71,
+          Away: 345.8,
+          Elev: -65.41,
+        },
+        {
+          Joint: 12,
+          Length: 31.95,
+          Inclination: 83.98,
+          LR: 0.4,
+          RawAzi: 233.41,
+          Away: 377.57,
+          Elev: -68.79,
+        },
+        {
+          Joint: 13,
+          Length: 31.55,
+          Inclination: 84.63,
+          LR: 0.38,
+          RawAzi: 233.41,
+          Away: 408.99,
+          Elev: -71.66,
+        },
+        {
+          Joint: 14,
+          Length: 31.49,
+          Inclination: 85.2,
+          LR: 0.45,
+          RawAzi: 233.57,
+          Away: 440.38,
+          Elev: -74.24,
+        },
+        {
+          Joint: 15,
+          Length: 31.89,
+          Inclination: 86,
+          LR: 0.45,
+          RawAzi: 233.36,
+          Away: 472.19,
+          Elev: -76.42,
+        },
+        {
+          Joint: 16,
+          Length: 31.6,
+          Inclination: 86.865,
+          LR: 0.51,
+          RawAzi: 233.88,
+          Away: 503.74,
+          Elev: -78.13,
+        },
+        {
+          Joint: 17,
+          Length: 31.9,
+          Inclination: 87.62,
+          LR: 0.69,
+          RawAzi: 233.76,
+          Away: 535.61,
+          Elev: -79.51,
+        },
+        {
+          Joint: 18,
+          Length: 31.86,
+          Inclination: 88.425,
+          LR: 0.88,
+          RawAzi: 233.61,
+          Away: 567.46,
+          Elev: -80.44,
+        },
+        {
+          Joint: 19,
+          Length: 31.77,
+          Inclination: 89.265,
+          LR: 0.95,
+          RawAzi: 233.47,
+          Away: 599.23,
+          Elev: -80.85,
+        },
+        {
+          Joint: 20,
+          Length: 31.62,
+          Inclination: 89.985,
+          LR: 0.96,
+          RawAzi: 233.4,
+          Away: 630.85,
+          Elev: -80.92,
+        },
+        {
+          Joint: 21,
+          Length: 31.45,
+          Inclination: 90.425,
+          LR: 0.97,
+          RawAzi: 233.67,
+          Away: 662.29,
+          Elev: -80.63,
+        },
+        {
+          Joint: 22,
+          Length: 33.39,
+          Inclination: 90.97,
+          LR: 1.11,
+          RawAzi: 233.71,
+          Away: 695.68,
+          Elev: -79.9,
+        },
+        {
+          Joint: 23,
+          Length: 32.05,
+          Inclination: 91.845,
+          LR: 1.22,
+          RawAzi: 233.44,
+          Away: 727.71,
+          Elev: -78.91,
+        },
+        {
+          Joint: 24,
+          Length: 31.92,
+          Inclination: 92.43,
+          LR: 1.26,
+          RawAzi: 233.32,
+          Away: 759.6,
+          Elev: -77.51,
+        },
+        {
+          Joint: 25,
+          Length: 32.1,
+          Inclination: 93.01,
+          LR: 1.12,
+          RawAzi: 233.03,
+          Away: 791.66,
+          Elev: -75.86,
+        },
+        {
+          Joint: 26,
+          Length: 31.85,
+          Inclination: 93.665,
+          LR: 0.86,
+          RawAzi: 233.05,
+          Away: 823.44,
+          Elev: -73.88,
+        },
+        {
+          Joint: 27,
+          Length: 31.75,
+          Inclination: 94.27,
+          LR: 0.71,
+          RawAzi: 232.9,
+          Away: 855.1,
+          Elev: -71.47,
+        },
+        {
+          Joint: 28,
+          Length: 31.1,
+          Inclination: 94.97,
+          LR: 0.6,
+          RawAzi: 233.24,
+          Away: 886.09,
+          Elev: -68.88,
+        },
+        {
+          Joint: 29,
+          Length: 31.32,
+          Inclination: 95.62,
+          LR: 0.57,
+          RawAzi: 233.48,
+          Away: 917.26,
+          Elev: -65.76,
+        },
+        {
+          Joint: 30,
+          Length: 31.75,
+          Inclination: 96.32,
+          LR: 0.55,
+          RawAzi: 233.45,
+          Away: 948.81,
+          Elev: -62.23,
+        },
+        {
+          Joint: 31,
+          Length: 33.16,
+          Inclination: 97,
+          LR: 0.57,
+          RawAzi: 233.4,
+          Away: 981.72,
+          Elev: -58.21,
+        },
+        {
+          Joint: 32,
+          Length: 31.83,
+          Inclination: 97.64,
+          LR: 0.62,
+          RawAzi: 233.46,
+          Away: 1013.27,
+          Elev: -53.95,
+        },
+        {
+          Joint: 33,
+          Length: 31.69,
+          Inclination: 98.31,
+          LR: 0.6,
+          RawAzi: 233.3,
+          Away: 1044.61,
+          Elev: -49.3,
+        },
+        {
+          Joint: 34,
+          Length: 31.4,
+          Inclination: 99.08,
+          LR: 0.59,
+          RawAzi: 233.68,
+          Away: 1075.62,
+          Elev: -44.35,
+        },
+        {
+          Joint: 35,
+          Length: 31.72,
+          Inclination: 99.835,
+          LR: 0.79,
+          RawAzi: 233.96,
+          Away: 1106.88,
+          Elev: -39,
+        },
+        {
+          Joint: 36,
+          Length: 31.9,
+          Inclination: 100.665,
+          LR: 1.01,
+          RawAzi: 233.79,
+          Away: 1138.25,
+          Elev: -33.17,
+        },
+        {
+          Joint: 37,
+          Length: 31.58,
+          Inclination: 100.77,
+          LR: 1.03,
+          RawAzi: 233.47,
+          Away: 1169.29,
+          Elev: -27.37,
+        },
+        {
+          Joint: 38,
+          Length: 31.62,
+          Inclination: 101.535,
+          LR: 0.72,
+          RawAzi: 233.73,
+          Away: 1200.25,
+          Elev: -20.98,
+        },
+        {
+          Joint: 39,
+          Length: 31.68,
+          Inclination: 103.035,
+          LR: 0.47,
+          RawAzi: 233.18,
+          Away: 1231.04,
+          Elev: -13.56,
+        },
+        {
+          Joint: 40,
+          Length: 31.89,
+          Inclination: 103.055,
+          LR: 0.38,
+          RawAzi: 233.62,
+          Away: 1262.09,
+          Elev: -6.25,
+        },
+        {
+          Joint: 41,
+          Length: 31.72,
+          Inclination: 102.565,
+          LR: 0.39,
+          RawAzi: 233.4,
+          Away: 1293.03,
+          Elev: 0.72,
+        },
+        {
+          Joint: 42,
+          Length: 31.85,
+          Inclination: 102.395,
+          LR: 0.41,
+          RawAzi: 233.4,
+          Away: 1324.15,
+          Elev: 7.48,
+        },
+        {
+          Joint: 43,
+          Length: 31.63,
+          Inclination: 102.415,
+          LR: 0.38,
+          RawAzi: 233.3,
+          Away: 1355.04,
+          Elev: 14.32,
+        },
+        {
+          Joint: 44,
+          Length: 31.91,
+          Inclination: 102.42,
+          LR: 0.37,
+          RawAzi: 233.65,
+          Away: 1386.17,
+          Elev: 21.3,
+        },
+        {
+          Joint: 45,
+          Length: 31.85,
+          Inclination: 103.135,
+          LR: 0.5,
+          RawAzi: 233.52,
+          Away: 1422.99,
+          Elev: 29.84,
+        },
+      ];
+
+      // Extract data for plotting
+      let away = hddData.map((d) => d.Away);
+      let elev = hddData.map((d) => d.Elev);
+      let lr = hddData.map((d) => d.LR);
+
+      // Create adjusted LR values based on azimuth (approximately)
+      let lrAdjusted = hddData.map((d) => {
+        return d.LR * Math.cos((233.5 * Math.PI) / 180);
+      });
+
+      // Function to show notification
+      function showNotification(message, isError = false) {
+        const notification = document.getElementById("notification");
+        notification.textContent = message;
+        notification.style.display = "block";
+
+        if (isError) {
+          notification.classList.add("error");
+        } else {
+          notification.classList.remove("error");
+        }
+
+        setTimeout(() => {
+          notification.style.display = "none";
+        }, 5000);
+      }
+
+      // Function to handle Excel file import
+      function handleExcelImport(event) {
+        const file = document.getElementById("fileInput").files[0];
+        if (!file) {
+          showNotification("Please select a file first", true);
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: "array" });
+
+            // Get the first sheet
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+
+            // Convert to JSON
+            let jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+            // Process header to find required columns
+            if (jsonData.length < 2) {
+              showNotification("File does not contain enough data", true);
+              return;
+            }
+
+            const headers = jsonData[0];
+
+            // Map expected headers to actual headers
+            const headerMap = {
+              "Joint #": -1,
+              Length: -1,
+              Inclination: -1,
+              "L/R": -1,
+              "Raw Azi.": -1,
+              Away: -1,
+              "Elev.": -1,
+            };
+
+            // Find the index of each required header
+            headers.forEach((header, index) => {
+              const headerStr = String(header).trim();
+              if (headerStr === "Joint #" || headerStr === "Joint")
+                headerMap["Joint #"] = index;
+              else if (headerStr === "Length") headerMap["Length"] = index;
+              else if (headerStr === "Inclination")
+                headerMap["Inclination"] = index;
+              else if (headerStr === "L/R") headerMap["L/R"] = index;
+              else if (
+                headerStr === "Raw Azi." ||
+                headerStr === "Raw Azimuth" ||
+                headerStr === "Azimuth" ||
+                headerStr === "RawAzi"
+              )
+                headerMap["Raw Azi."] = index;
+              else if (headerStr === "Away") headerMap["Away"] = index;
+              else if (
+                headerStr === "Elev." ||
+                headerStr === "Elevation" ||
+                headerStr === "Elev"
+              )
+                headerMap["Elev."] = index;
+            });
+
+            // Check if all required headers were found
+            const missingHeaders = Object.entries(headerMap)
+              .filter(([_, value]) => value === -1)
+              .map(([key, _]) => key);
+
+            if (missingHeaders.length > 0) {
+              showNotification(
+                `Missing required headers: ${missingHeaders.join(", ")}`,
+                true
+              );
+              return;
+            }
+
+            // Parse data rows and convert to proper format
+            const newHddData = [];
+            for (let i = 1; i < jsonData.length; i++) {
+              const row = jsonData[i];
+              if (
+                !row ||
+                row.length === 0 ||
+                row.every((cell) => cell === null || cell === "")
+              )
+                continue;
+
+              try {
+                const jointObj = {
+                  Joint: Number(row[headerMap["Joint #"]]),
+                  Length: Number(row[headerMap["Length"]]) || 0,
+                  Inclination: Number(row[headerMap["Inclination"]]) || 0,
+                  LR: Number(row[headerMap["L/R"]]) || 0,
+                  RawAzi: Number(row[headerMap["Raw Azi."]]) || 0,
+                  Away: Number(row[headerMap["Away"]]) || 0,
+                  Elev: Number(row[headerMap["Elev."]]) || 0,
+                };
+
+                // Only add if the mandatory fields are valid numbers
+                if (
+                  !isNaN(jointObj.Joint) &&
+                  !isNaN(jointObj.Away) &&
+                  !isNaN(jointObj.Elev)
+                ) {
+                  newHddData.push(jointObj);
+                }
+              } catch (e) {
+                console.warn("Error processing row:", row, e);
+                // Continue with the next row
+              }
+            }
+
+            if (newHddData.length === 0) {
+              showNotification("No valid data rows found in file", true);
+              return;
+            }
+
+            // Update the global hddData
+            hddData = newHddData;
+
+            // Extract updated data for plotting
+            away = hddData.map((d) => d.Away);
+            elev = hddData.map((d) => d.Elev);
+            lr = hddData.map((d) => d.LR);
+            lrAdjusted = hddData.map(
+              (d) => d.LR * Math.cos((233.5 * Math.PI) / 180)
+            );
+
+            // Clear any selected joint
+            clearSelectedJoint();
+
+            // Recreate the plots
+            createPlots();
+            showNotification("Excel data imported successfully!");
+          } catch (error) {
+            console.error("Error processing Excel file:", error);
+            showNotification(
+              "Error processing Excel file. Check console for details.",
+              true
+            );
+          }
+        };
+
+        reader.onerror = function () {
+          showNotification("Error reading file", true);
+        };
+
+        reader.readAsArrayBuffer(file);
+      }
+
+      // Create 3D plots using Plotly
+      function createPlots() {
+        // 3D Plot
+        const borePath = {
+          type: "scatter3d",
+          mode: "lines+markers",
+          name: "Bore Path",
+          x: away,
+          y: lrAdjusted,
+          z: elev,
+          line: {
+            color: "#1f77b4",
+            width: 6,
+          },
+          marker: {
+            size: 5,
+            color: "#1f77b4",
+            symbol: "circle",
+          },
+          hoverinfo: "text",
+          hovertext: hddData.map(
+            (d) =>
+              `Joint: ${d.Joint}<br>` +
+              `Away: ${d.Away.toFixed(2)} ft<br>` +
+              `Elevation: ${d.Elev.toFixed(2)} ft<br>` +
+              `Inclination: ${d.Inclination.toFixed(2)}°<br>` +
+              `L/R: ${d.LR.toFixed(2)}`
+          ),
+          customdata: hddData.map((d, i) => i),
+        };
+
+        // Individual joints as points
+        const joints = {
+          type: "scatter3d",
+          mode: "markers",
+          name: "Joints",
+          x: away,
+          y: lrAdjusted,
+          z: elev,
+          marker: {
+            size: 8,
+            color: "#1f77b4",
+            symbol: "circle",
+            line: {
+              color: "black",
+              width: 1,
+            },
+          },
+          hoverinfo: "text",
+          hovertext: hddData.map(
+            (d) =>
+              `Joint: ${d.Joint}<br>` +
+              `Away: ${d.Away.toFixed(2)} ft<br>` +
+              `Elevation: ${d.Elev.toFixed(2)} ft<br>` +
+              `Inclination: ${d.Inclination.toFixed(2)}°<br>` +
+              `L/R: ${d.LR.toFixed(2)}`
+          ),
+          customdata: hddData.map((d, i) => i),
+        };
+
+        // Centerline (straight line from entry to exit)
+        const centerline = {
+          type: "scatter3d",
+          mode: "lines",
+          name: "Centerline",
+          x: [away[0], away[away.length - 1]],
+          y: [0, 0],
+          z: [elev[0], elev[elev.length - 1]],
+          line: {
+            color: "#ff7f0e",
+            width: 4,
+            dash: "dash",
+          },
+          hoverinfo: "none",
+        };
+
+        // 3D Plot layout
+        const layout3d = {
+          title: {
+            text: "3D Bore Geometry",
+            font: {
+              family: "Arial, sans-serif",
+              size: 24,
+            },
+          },
+          autosize: true,
+          scene: {
+            aspectratio: {
+              x: 4,
+              y: 1,
+              z: 1,
+            },
+            xaxis: {
+              title: "Away Distance (ft)",
+              gridcolor: "#dddddd",
+              zerolinecolor: "#999999",
+              showbackground: true,
+              backgroundcolor: "#f8f8f8",
+            },
+            yaxis: {
+              title: "Left/Right Offset (ft)",
+              gridcolor: "#dddddd",
+              zerolinecolor: "#999999",
+              showbackground: true,
+              backgroundcolor: "#f8f8f8",
+            },
+            zaxis: {
+              title: "Elevation (ft)",
+              gridcolor: "#dddddd",
+              zerolinecolor: "#999999",
+              showbackground: true,
+              backgroundcolor: "#f8f8f8",
+            },
+            camera: {
+              eye: { x: 1.5, y: -1.5, z: 0.5 },
+              center: { x: 0, y: 0, z: 0 },
+            },
+          },
+          margin: {
+            l: 50,
+            r: 50,
+            b: 50,
+            t: 50,
+            pad: 4,
+          },
+          showlegend: true,
+          legend: {
+            x: 0,
+            y: 1,
+            orientation: "h",
+          },
+        };
+
+        // 2D Profile Plot (elevation vs. away)
+        const profile = {
+          type: "scatter",
+          mode: "lines+markers",
+          name: "Bore Path Profile",
+          x: away,
+          y: elev,
+          line: {
+            color: "#1f77b4",
+            width: 3,
+          },
+          marker: {
+            size: 6,
+            color: "#1f77b4",
+          },
+          hoverinfo: "text",
+          hovertext: hddData.map(
+            (d) =>
+              `Joint: ${d.Joint}<br>` +
+              `Away: ${d.Away.toFixed(2)} ft<br>` +
+              `Elevation: ${d.Elev.toFixed(2)} ft<br>` +
+              `Inclination: ${d.Inclination.toFixed(2)}°`
+          ),
+          customdata: hddData.map((d, i) => i),
+        };
+
+        // Centerline for 2D
+        const centerlineProfile = {
+          type: "scatter",
+          mode: "lines",
+          name: "Centerline",
+          x: [away[0], away[away.length - 1]],
+          y: [elev[0], elev[elev.length - 1]],
+          line: {
+            color: "#ff7f0e",
+            width: 2,
+            dash: "dash",
+          },
+          hoverinfo: "none",
+        };
+
+        // 2D Plot layout
+        const layout2d = {
+          title: {
+            text: "Bore Profile (Elevation vs. Distance)",
+            font: {
+              family: "Arial, sans-serif",
+              size: 20,
+            },
+          },
+          xaxis: {
+            title: "Away Distance (ft)",
+            gridcolor: "#dddddd",
+            zerolinecolor: "#999999",
+          },
+          yaxis: {
+            title: "Elevation (ft)",
+            gridcolor: "#dddddd",
+            zerolinecolor: "#999999",
+          },
+          margin: {
+            l: 50,
+            r: 50,
+            b: 50,
+            t: 50,
+            pad: 4,
+          },
+          showlegend: true,
+          legend: {
+            x: 0,
+            y: 1,
+            orientation: "h",
+          },
+        };
+
+        // Create 3D plot
+        Plotly.newPlot("plot3d", [borePath, joints, centerline], layout3d, {
+          responsive: true,
+        });
+
+        // Create 2D plot
+        Plotly.newPlot("plot2d", [profile, centerlineProfile], layout2d, {
+          responsive: true,
+        });
+
+        // Set up event listeners for interactivity
+        setupEventListeners();
+      }
+
+      function setupEventListeners() {
+        // Joint selection in 3D plot
+        document.getElementById("plot3d").on("plotly_click", function (data) {
+          handlePointSelection(data);
+        });
+
+        // Joint selection in 2D plot
+        document.getElementById("plot2d").on("plotly_click", function (data) {
+          handlePointSelection(data);
+        });
+
+        // Reset view button
+        document
+          .getElementById("resetViewBtn")
+          .addEventListener("click", function () {
+            Plotly.relayout("plot3d", {
+              "scene.camera.eye": { x: 1.5, y: -1.5, z: 0.5 },
+              "scene.camera.center": { x: 0, y: 0, z: 0 },
+            });
+
+            // Reset joint selection
+            clearSelectedJoint();
+          });
+
+        // Front view button
+        document
+          .getElementById("frontViewBtn")
+          .addEventListener("click", function () {
+            Plotly.relayout("plot3d", {
+              "scene.camera.eye": { x: 0, y: -2, z: 0.1 },
+              "scene.camera.center": { x: 0, y: 0, z: 0 },
+            });
+          });
+
+        // Top view button
+        document
+          .getElementById("topViewBtn")
+          .addEventListener("click", function () {
+            Plotly.relayout("plot3d", {
+              "scene.camera.eye": { x: 0, y: 0, z: 2 },
+              "scene.camera.center": { x: 0, y: 0, z: 0 },
+            });
+          });
+
+        // Toggle joints visibility
+        document
+          .getElementById("toggleJointsBtn")
+          .addEventListener("click", function () {
+            const plot3d = document.getElementById("plot3d");
+            const visibility =
+              plot3d.data[1].visible === "legendonly" ? true : "legendonly";
+
+            Plotly.restyle("plot3d", { visible: visibility }, [1]);
+          });
+
+        // Import Excel data button
+        document
+          .getElementById("importBtn")
+          .addEventListener("click", handleExcelImport);
+      }
+
+      function handlePointSelection(data) {
+        if (!data || !data.points || data.points.length === 0) return;
+
+        const point = data.points[0];
+        if (!point.hasOwnProperty("customdata")) return;
+
+        const jointIndex = point.customdata;
+
+        // Update the joint info display
+        updateJointInfo(jointIndex);
+
+        // Highlight the selected joint in 3D and 2D
+        highlightSelectedJoint(jointIndex);
+      }
+
+      function updateJointInfo(jointIndex) {
+        const joint = hddData[jointIndex];
+
+        // Format joint information
+        const jointInfo =
+          `Joint #: ${joint.Joint}\n` +
+          `Length: ${joint.Length.toFixed(2)} ft\n` +
+          `Inclination: ${joint.Inclination.toFixed(2)}°\n` +
+          `L/R: ${joint.LR.toFixed(2)}\n` +
+          `Raw Azimuth: ${joint.RawAzi.toFixed(2)}°\n` +
+          `Away: ${joint.Away.toFixed(2)} ft\n` +
+          `Elevation: ${joint.Elev.toFixed(2)} ft`;
+
+        document.getElementById("joint-data").textContent = jointInfo;
+
+        // Create detailed joint information cards
+        const jointDetailsContainer = document.getElementById("joint-details");
+        jointDetailsContainer.innerHTML = "";
+
+        // Position Card
+        const positionCard = document.createElement("div");
+        positionCard.className = "detail-card";
+        positionCard.innerHTML = `
+          <h4>Position</h4>
+          <div class="detail-item">
+            <span class="detail-label">Away:</span>
+            <span class="detail-value">${joint.Away.toFixed(2)} ft</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Elevation:</span>
+            <span class="detail-value">${joint.Elev.toFixed(2)} ft</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Left/Right:</span>
+            <span class="detail-value">${joint.LR.toFixed(2)} ft</span>
+          </div>
+        `;
+
+        // Orientation Card
+        const orientationCard = document.createElement("div");
+        orientationCard.className = "detail-card";
+        orientationCard.innerHTML = `
+          <h4>Orientation</h4>
+          <div class="detail-item">
+            <span class="detail-label">Inclination:</span>
+            <span class="detail-value">${joint.Inclination.toFixed(2)}°</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Azimuth:</span>
+            <span class="detail-value">${joint.RawAzi.toFixed(2)}°</span>
+          </div>
+        `;
+
+        // Joint Details Card
+        const jointDetailsCard = document.createElement("div");
+        jointDetailsCard.className = "detail-card";
+        jointDetailsCard.innerHTML = `
+          <h4>Joint Details</h4>
+          <div class="detail-item">
+            <span class="detail-label">Joint Number:</span>
+            <span class="detail-value">${joint.Joint}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Length:</span>
+            <span class="detail-value">${joint.Length.toFixed(2)} ft</span>
+          </div>
+        `;
+
+        // Add the cards to the container
+        jointDetailsContainer.appendChild(positionCard);
+        jointDetailsContainer.appendChild(orientationCard);
+        jointDetailsContainer.appendChild(jointDetailsCard);
+      }
+
+      function highlightSelectedJoint(jointIndex) {
+        // Get current data from plots
+        const plot3d = document.getElementById("plot3d");
+        const plot2d = document.getElementById("plot2d");
+
+        // Clear any previous selection first
+        clearSelectedJoint();
+
+        // Create highlighted point for 3D plot
+        const highlightedPoint3D = {
+          type: "scatter3d",
+          mode: "markers",
+          name: "Selected Joint",
+          x: [hddData[jointIndex].Away],
+          y: [lrAdjusted[jointIndex]],
+          z: [hddData[jointIndex].Elev],
+          marker: {
+            size: 12,
+            color: "red",
+            symbol: "circle",
+            line: {
+              color: "white",
+              width: 1,
+            },
+          },
+          hoverinfo: "text",
+          hovertext: `Joint #${hddData[jointIndex].Joint}`,
+          showlegend: false,
+        };
+
+        // Create highlighted point for 2D plot
+        const highlightedPoint2D = {
+          type: "scatter",
+          mode: "markers",
+          name: "Selected Joint",
+          x: [hddData[jointIndex].Away],
+          y: [hddData[jointIndex].Elev],
+          marker: {
+            size: 12,
+            color: "red",
+            symbol: "circle",
+            line: {
+              color: "white",
+              width: 1,
+            },
+          },
+          hoverinfo: "text",
+          hovertext: `Joint #${hddData[jointIndex].Joint}`,
+          showlegend: false,
+        };
+
+        // Add the highlighted points to the plots
+        Plotly.addTraces("plot3d", highlightedPoint3D);
+        Plotly.addTraces("plot2d", highlightedPoint2D);
+      }
+
+      function clearSelectedJoint() {
+        const plot3d = document.getElementById("plot3d");
+        const plot2d = document.getElementById("plot2d");
+
+        // Check if there's a selected joint (it would be the last trace)
+        if (plot3d && plot3d.data.length > 3) {
+          Plotly.deleteTraces("plot3d", plot3d.data.length - 1);
+        }
+
+        if (plot2d && plot2d.data.length > 2) {
+          Plotly.deleteTraces("plot2d", plot2d.data.length - 1);
+        }
+
+        // Reset joint info
+        document.getElementById("joint-data").textContent = "No joint selected";
+
+        // Clear the detailed joint information
+        document.getElementById("joint-details").innerHTML = "";
+      }
+
+      // Initialize the plots when the page loads
+      window.addEventListener("load", createPlots);
+
+      // Add cursor pointer to plot containers
+      document.addEventListener("DOMContentLoaded", function () {
+        const plotContainers = document.querySelectorAll("#plot3d, #plot2d");
+        plotContainers.forEach((container) => {
+          container.style.cursor = "pointer";
+        });
+      });
+    </script>
+  </body>
+</html>
