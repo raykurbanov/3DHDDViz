@@ -58,6 +58,7 @@ const HddGeneratorApp = () => {
   const [isSurfaceProcessing, setIsSurfaceProcessing] = useState(false);
   const [isSurfaceReady, setIsSurfaceReady] = useState(false);
   const [surfaceErrorMessage, setSurfaceErrorMessage] = useState("");
+  const [surfaceSuccessMessage, setSurfaceSuccessMessage] = useState("");
   const [showSurfaceData, setShowSurfaceData] = useState(true);
   const [entryPoint, setEntryPoint] = useState(null);
   const [exitPoint, setExitPoint] = useState(null);
@@ -234,6 +235,7 @@ const HddGeneratorApp = () => {
 
     setIsSurfaceProcessing(true);
     setSurfaceErrorMessage("");
+    setSurfaceSuccessMessage("");
 
     try {
       const data = await surfaceFile.arrayBuffer();
@@ -323,7 +325,23 @@ const HddGeneratorApp = () => {
       setSurfaceData(parsedSurfaceData);
       setIsSurfaceReady(true);
       setShowSurfaceData(true); // Always show the surface
-      message.success("Surface data processed successfully!");
+
+      // Display success messages
+      message.success({
+        content: "Surface data processed successfully!",
+        duration: 4,
+        icon: <CheckCircleOutlined style={{ color: "#52c41a" }} />,
+      });
+
+      // Set success message for Alert component
+      const successMessage = `Successfully processed ${
+        parsedSurfaceData.length
+      } surface data points. 
+        Station range: ${Math.min(
+          ...parsedSurfaceData.map((d) => d.Station)
+        ).toFixed(2)} to 
+        ${Math.max(...parsedSurfaceData.map((d) => d.Station)).toFixed(2)} ft.`;
+      setSurfaceSuccessMessage(successMessage);
     } catch (error) {
       console.error("Error processing surface Excel file:", error);
       setSurfaceErrorMessage(
@@ -1609,6 +1627,17 @@ const HddGeneratorApp = () => {
                     type="error"
                     showIcon
                     className="mt-4"
+                  />
+                )}
+
+                {surfaceSuccessMessage && (
+                  <Alert
+                    message="Surface Data Processed Successfully"
+                    description={surfaceSuccessMessage}
+                    type="success"
+                    showIcon
+                    className="mt-4"
+                    icon={<CheckCircleOutlined />}
                   />
                 )}
 
