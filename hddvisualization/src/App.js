@@ -636,7 +636,7 @@ const HddGeneratorApp = () => {
         </div>
         <div class="legend-item">
           <div class="legend-color" style="background-color: #33cc33"></div>
-          <span>Surface Points</span>
+          <span>Surface</span>
         </div>
         <div class="legend-item">
           <div class="legend-color" style="background-color: #ff9900"></div>
@@ -644,7 +644,7 @@ const HddGeneratorApp = () => {
         </div>
         <div class="legend-item">
           <div class="legend-color" style="background-color: rgba(255, 153, 0, 0.3)"></div>
-          <span>Centerline Corridor</span>
+          <span>Centerline Corridor (10ft)</span>
         </div>
       </div>
 
@@ -825,25 +825,35 @@ const HddGeneratorApp = () => {
         const centerlinePoints = calculateCenterline();
         if (!centerlinePoints || centerlinePoints.x.length === 0) return null;
         
-        // Create a corridor as a surface plane following the centerline
-        return {
-          type: 'mesh3d',
-          x: [
-            ...centerlinePoints.x, // Left side points
-            ...centerlinePoints.x.slice().reverse() // Right side points (reversed order)
-          ],
-          y: [
-            ...centerlinePoints.x.map(() => -5), // Left side at -5ft offset
-            ...centerlinePoints.x.map(() => 5).reverse() // Right side at +5ft offset (reversed)
-          ],
-          z: [
-            ...centerlinePoints.z, // Left side elevations
-            ...centerlinePoints.z.slice().reverse() // Right side elevations (reversed)
-          ],
+        // Instead of using mesh3d which creates unwanted vertical walls,
+        // create a series of flat rectangular segments using scatter3d with fill3d
+        const numPoints = centerlinePoints.x.length;
+        
+        // Create left and right side points for the corridor
+        const leftX = [...centerlinePoints.x];
+        const leftY = centerlinePoints.x.map(() => -5); // 5ft to the left
+        const leftZ = [...centerlinePoints.z];
+        
+        const rightX = [...centerlinePoints.x];
+        const rightY = centerlinePoints.x.map(() => 5); // 5ft to the right
+        const rightZ = [...centerlinePoints.z];
+        
+        // Create a surface using multiple scatter3d traces
+        const traces = [];
+        
+        // Main corridor surface (flat plane)
+        traces.push({
+          type: 'surface',
+          x: [leftX, rightX],
+          y: [leftY, rightY],
+          z: [leftZ, rightZ],
           opacity: 0.3,
-          color: '#ff9900',
+          showscale: false,
+          colorscale: [[0, '#ff9900'], [1, '#ff9900']],
           hoverinfo: 'none'
-        };
+        });
+        
+        return traces;
       }
 
       // Function to prepare surface data for visualization
@@ -986,11 +996,13 @@ const HddGeneratorApp = () => {
           traces3D.push(centerline);
           
           // Add centerline corridor (10ft wide surface plane)
-          const corridor = createCenterlineCorridor();
-          if (corridor) {
-            corridor.visible = showCenterline ? true : "legendonly";
-            corridor.name = "Centerline Corridor";
-            traces3D.push(corridor);
+          const corridorTraces = createCenterlineCorridor();
+          if (corridorTraces && corridorTraces.length > 0) {
+            corridorTraces.forEach(trace => {
+              trace.visible = showCenterline ? true : "legendonly";
+              trace.name = "Centerline Corridor";
+              traces3D.push(trace);
+            });
           }
         }
 
