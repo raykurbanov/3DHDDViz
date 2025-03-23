@@ -15,19 +15,13 @@ import {
   Input,
   Modal,
   Form,
-  Tabs,
-  Table,
-  Switch,
-  Tooltip,
   Collapse,
 } from "antd";
 import {
-  UploadOutlined,
   FileExcelOutlined,
   CheckCircleOutlined,
   DownloadOutlined,
   LoadingOutlined,
-  InfoCircleOutlined,
   QuestionCircleOutlined,
 } from "@ant-design/icons";
 
@@ -35,7 +29,6 @@ const { Title, Text, Paragraph } = Typography;
 const { Dragger } = Upload;
 const { Header, Content, Footer } = Layout;
 const { Step } = Steps;
-const { TabPane } = Tabs;
 const { Panel } = Collapse;
 
 const HddGeneratorApp = () => {
@@ -51,7 +44,7 @@ const HddGeneratorApp = () => {
   const [downloadFileName, setDownloadFileName] = useState("hdd-visualization");
   const [form] = Form.useForm();
 
-  // New surface data states
+  // Surface data states
   const [surfaceFile, setSurfaceFile] = useState(null);
   const [surfaceFileName, setSurfaceFileName] = useState("");
   const [surfaceData, setSurfaceData] = useState([]);
@@ -63,28 +56,57 @@ const HddGeneratorApp = () => {
   const [entryPoint, setEntryPoint] = useState(null);
   const [exitPoint, setExitPoint] = useState(null);
 
-  const handleFileChange = (info) => {
-    if (info.file.status === "done") {
-      setFile(info.file.originFileObj);
-      setFileName(info.file.name);
-      setErrorMessage("");
-      setIsReady(false);
-      message.success(`${info.file.name} file uploaded successfully`);
-    } else if (info.file.status === "error") {
+  // Boring log data states
+  const [boringLogFileList, setBoringLogFileList] = useState([]);
+  const [boringLogData, setBoringLogData] = useState([]);
+  const [isBoringLogProcessing, setIsBoringLogProcessing] = useState(false);
+  const [isBoringLogReady, setIsBoringLogReady] = useState(false);
+  const [boringLogErrorMessage, setBoringLogErrorMessage] = useState("");
+  const [boringLogSuccessMessage, setBoringLogSuccessMessage] = useState("");
+  const [showBoringLogs, setShowBoringLogs] = useState(true);
+
+  const handleBoringLogFileChange = (info) => {
+    // Update fileList state
+    setBoringLogFileList(info.fileList);
+
+    // Set status messages based on file changes
+    const { status } = info.file;
+
+    if (status === "done") {
+      message.success(`${info.file.name} file uploaded successfully.`);
+    } else if (status === "error") {
       message.error(`${info.file.name} file upload failed.`);
+    }
+
+    // Clear previous processing results when files change
+    if (info.fileList.length !== boringLogFileList.length) {
+      setBoringLogErrorMessage("");
+      setBoringLogSuccessMessage("");
+      setIsBoringLogReady(false);
     }
   };
 
-  const handleSurfaceFileChange = (info) => {
-    if (info.file.status === "done") {
-      setSurfaceFile(info.file.originFileObj);
-      setSurfaceFileName(info.file.name);
-      setSurfaceErrorMessage("");
-      setIsSurfaceReady(false);
-      message.success(`${info.file.name} surface file uploaded successfully`);
-    } else if (info.file.status === "error") {
-      message.error(`${info.file.name} surface file upload failed.`);
-    }
+  // Function to determine soil color based on description
+  const getSoilColor = (soilDescription) => {
+    const desc = soilDescription.toUpperCase();
+
+    // Color codes for different soil/rock types
+    if (desc.includes("SAND") || desc.includes("SANDY")) return "#e6c35c"; // yellow
+    if (desc.includes("CLAY")) return "#8b4513"; // brown
+    if (desc.includes("SILT")) return "#d2b48c"; // tan
+    if (desc.includes("GRAVEL")) return "#a0a0a0"; // light gray
+    if (
+      desc.includes("LIMESTONE") ||
+      desc.includes("BEDROCK") ||
+      desc.includes("ROCK")
+    )
+      return "#696969"; // dark gray
+    if (desc.includes("TOP SOIL") || desc.includes("TOPSOIL")) return "#3d2314"; // dark brown
+    if (desc.includes("SHALE")) return "#2f4f4f"; // dark slate gray
+    if (desc.includes("ORGANIC") || desc.includes("PEAT")) return "#000000"; // black
+
+    // Default color if no match
+    return "#a52a2a"; // general brown
   };
 
   const processExcelFile = async () => {
@@ -212,6 +234,11 @@ const HddGeneratorApp = () => {
       // Also process surface data if available
       if (surfaceFile && !isSurfaceReady) {
         await processSurfaceExcelFile();
+      }
+
+      // Also process boring log data if available
+      if (boringLogFileList.length > 0 && !isBoringLogReady) {
+        await processBoringLogExcelFile();
       }
 
       setIsReady(true);
@@ -354,6 +381,184 @@ const HddGeneratorApp = () => {
     }
   };
 
+  const processBoringLogExcelFile = async () => {
+    if (boringLogFileList.length === 0) {
+      message.error("Please select at least one boring log Excel file first");
+      return;
+    }
+
+    setIsBoringLogProcessing(true);
+    setBoringLogErrorMessage("");
+    setBoringLogSuccessMessage("");
+
+    try {
+      // Initialize with empty array to collect all boring log data
+      let allBoringLogData = [];
+
+      // Process each file in the array
+      for (let i = 0; i < boringLogFileList.length; i++) {
+        const currentFile = boringLogFileList[i].originFileObj;
+        const currentFileName = boringLogFileList[i].name;
+
+        if (!currentFile) {
+          console.warn(`Missing file object for ${currentFileName}, skipping`);
+          continue;
+        }
+
+        const data = await currentFile.arrayBuffer();
+        const workbook = XLSX.read(data, { type: "array" });
+
+        // Get the first sheet
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+
+        // Convert to JSON
+        let jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+        // Process header to find required columns
+        if (jsonData.length < 2) {
+          message.warning(
+            `File ${currentFileName} does not contain enough data - skipping`
+          );
+          continue;
+        }
+
+        const headers = jsonData[0];
+
+        // Map expected headers for boring log data
+        const headerMap = {
+          STA: -1,
+          "Zone Start Elevation": -1,
+          "Zone End Elevation": -1,
+          "Soil Description": -1,
+        };
+
+        // Find the index of each required header
+        headers.forEach((header, index) => {
+          const headerStr = String(header).trim();
+          if (headerStr === "STA") headerMap["STA"] = index;
+          else if (
+            headerStr === "Zone Start Elevation (ft)" ||
+            headerStr === "Zone Start Elevation"
+          )
+            headerMap["Zone Start Elevation"] = index;
+          else if (
+            headerStr === "Zone End Elevation (ft)" ||
+            headerStr === "Zone End Elevation"
+          )
+            headerMap["Zone End Elevation"] = index;
+          else if (
+            headerStr === "Soil Description per Geotech Logs / Report" ||
+            headerStr === "Soil Description"
+          )
+            headerMap["Soil Description"] = index;
+        });
+
+        // Check if all required headers were found
+        const missingHeaders = Object.entries(headerMap)
+          .filter(([_, value]) => value === -1)
+          .map(([key, _]) => key);
+
+        if (missingHeaders.length > 0) {
+          message.warning(
+            `File ${currentFileName} is missing required headers: ${missingHeaders.join(
+              ", "
+            )} - skipping`
+          );
+          continue;
+        }
+
+        // Parse data rows and convert to proper format
+        const fileBoringLogData = [];
+        for (let i = 1; i < jsonData.length; i++) {
+          const row = jsonData[i];
+          if (
+            !row ||
+            row.length === 0 ||
+            row.every((cell) => cell === null || cell === "")
+          )
+            continue;
+
+          try {
+            const boringLogPoint = {
+              Station: Number(row[headerMap["STA"]]),
+              StartElevation: Number(row[headerMap["Zone Start Elevation"]]),
+              EndElevation: Number(row[headerMap["Zone End Elevation"]]),
+              SoilDescription: String(row[headerMap["Soil Description"]]),
+              Color: getSoilColor(String(row[headerMap["Soil Description"]])),
+              FileName: currentFileName, // Store filename for reference
+            };
+
+            // Only add if all fields are valid
+            if (
+              !isNaN(boringLogPoint.Station) &&
+              !isNaN(boringLogPoint.StartElevation) &&
+              !isNaN(boringLogPoint.EndElevation) &&
+              boringLogPoint.SoilDescription
+            ) {
+              fileBoringLogData.push(boringLogPoint);
+            }
+          } catch (e) {
+            console.warn(
+              `Error processing boring log row in file ${currentFileName}:`,
+              row,
+              e
+            );
+            // Continue with the next row
+          }
+        }
+
+        if (fileBoringLogData.length === 0) {
+          message.warning(
+            `No valid data rows found in boring log file ${currentFileName} - skipping`
+          );
+          continue;
+        }
+
+        // Add this file's data to the combined array
+        allBoringLogData = [...allBoringLogData, ...fileBoringLogData];
+
+        message.success(
+          `Processed ${fileBoringLogData.length} boring log entries from ${currentFileName}`
+        );
+      }
+
+      // After processing all files, check if we have any data
+      if (allBoringLogData.length === 0) {
+        throw new Error("No valid data found in any of the boring log files");
+      }
+
+      // Store the combined parsed boring log data
+      setBoringLogData(allBoringLogData);
+      setIsBoringLogReady(true);
+      setShowBoringLogs(true);
+
+      // Display success messages
+      message.success({
+        content: "All boring log data processed successfully!",
+        duration: 4,
+        icon: <CheckCircleOutlined style={{ color: "#52c41a" }} />,
+      });
+
+      // Set success message for Alert component
+      const successMessage = `Successfully processed ${
+        allBoringLogData.length
+      } boring log data points at ${
+        new Set(allBoringLogData.map((d) => d.Station)).size
+      } unique stations from ${boringLogFileList.length} files.`;
+      setBoringLogSuccessMessage(successMessage);
+    } catch (error) {
+      console.error("Error processing boring log Excel file:", error);
+      setBoringLogErrorMessage(
+        error.message || "Error processing boring log Excel file"
+      );
+      setIsBoringLogReady(false);
+      message.error(error.message || "Error processing boring log Excel file");
+    } finally {
+      setIsBoringLogProcessing(false);
+    }
+  };
+
   const showNameModal = () => {
     // Extract a default filename from the Excel file name
     if (fileName) {
@@ -403,6 +608,12 @@ const HddGeneratorApp = () => {
     const surfaceDataJSON =
       isSurfaceReady && surfaceData.length > 0
         ? JSON.stringify(surfaceData)
+        : "[]";
+
+    // Prepare boring log data if available
+    const boringLogDataJSON =
+      isBoringLogReady && boringLogData.length > 0
+        ? JSON.stringify(boringLogData)
         : "[]";
 
     // Determine entry and exit points for center line
@@ -627,6 +838,23 @@ const HddGeneratorApp = () => {
         max-height: 600px; /* Height for approximately 15 rows */
         overflow-y: auto;
       }
+      /* Soil type legend */
+      .soil-legend {
+        margin-top: 15px;
+        border: 1px solid #ddd;
+        padding: 10px;
+        background-color: white;
+        border-radius: 4px;
+      }
+      .soil-legend h4 {
+        margin-top: 0;
+        margin-bottom: 10px;
+      }
+      .soil-legend-items {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
     </style>
   </head>
   <body>
@@ -643,8 +871,7 @@ const HddGeneratorApp = () => {
         <button id="frontViewBtn">Front View</button>
         <button id="topViewBtn">Top View</button>
         <button id="toggleCenterlineBtn">Toggle Centerline</button>
-        
-    <!-- Surface toggle removed as surface is always shown -->
+        <button id="toggleBoringLogsBtn">Toggle Boring Logs</button>
       </div>
 
       <div class="legend">
@@ -663,6 +890,45 @@ const HddGeneratorApp = () => {
         <div class="legend-item">
           <div class="legend-color" style="background-color: rgba(255, 153, 0, 0.3)"></div>
           <span>Centerline Corridor (10ft)</span>
+        </div>
+      </div>
+
+      <!-- Soil Type Legend -->
+      <div class="soil-legend">
+        <h4>Soil & Rock Type Legend</h4>
+        <div class="soil-legend-items">
+          <div class="legend-item">
+            <div class="legend-color" style="background-color: #8b4513"></div>
+            <span>Clay</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background-color: #e6c35c"></div>
+            <span>Sand</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background-color: #d2b48c"></div>
+            <span>Silt</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background-color: #a0a0a0"></div>
+            <span>Gravel</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background-color: #696969"></div>
+            <span>Limestone/Rock</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background-color: #3d2314"></div>
+            <span>Top Soil</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background-color: #2f4f4f"></div>
+            <span>Shale</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background-color: #000000"></div>
+            <span>Organic/Peat</span>
+          </div>
         </div>
       </div>
 
@@ -713,6 +979,9 @@ const HddGeneratorApp = () => {
       // Surface data
       let surfaceData = ${surfaceDataJSON};
       
+      // Boring log data
+      let boringLogData = ${boringLogDataJSON};
+      
       // Entry and exit points for centerline
       const entryPoint = ${entryPointJSON};
       const exitPoint = ${exitPointJSON};
@@ -730,6 +999,7 @@ const HddGeneratorApp = () => {
       // State variables
       let showSurface = ${isSurfaceReady && surfaceData.length > 0};
       let showCenterline = true;
+      let showBoringLogs = ${isBoringLogReady && boringLogData.length > 0};
       let selectedJointIndex = -1;
 
       // Function to show notification
@@ -915,6 +1185,136 @@ const HddGeneratorApp = () => {
         };
       }
 
+      // Function to prepare boring log data for 3D visualization
+      function prepareBoringLogsFor3D() {
+        if (!boringLogData || boringLogData.length === 0) return [];
+        
+        const traces = [];
+        
+        boringLogData.forEach(log => {
+          // Only show boring logs that are within the HDD range
+          if (entryPoint && exitPoint && 
+              (log.Station < entryPoint.Away || log.Station > exitPoint.Away)) {
+            return;
+          }
+          
+          // Create a box for each boring log layer
+          // Create vertices for the box (3' wide x 15' long horizontally centered on centerline)
+          const halfLength = 7.5; // 15' total length, 7.5' on each side of centerpoint
+          const halfWidth = 1.5; // 3' total width, 1.5' on each side of centerline
+          
+          const x = [
+            log.Station - halfLength, log.Station - halfLength, log.Station + halfLength, log.Station + halfLength,
+            log.Station - halfLength, log.Station - halfLength, log.Station + halfLength, log.Station + halfLength
+          ];
+          
+          // Y coordinates for the box (3' wide, centered on centerline)
+          const y = [
+            -halfWidth, halfWidth, halfWidth, -halfWidth,
+            -halfWidth, halfWidth, halfWidth, -halfWidth
+          ];
+          
+          // Z coordinates (start and end elevations)
+          const z = [
+            log.EndElevation, log.EndElevation, log.EndElevation, log.EndElevation,
+            log.StartElevation, log.StartElevation, log.StartElevation, log.StartElevation
+          ];
+          
+          // Indices for triangles
+          const i = [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 0, 4, 5, 0, 5, 1, 2, 6, 7, 2, 7, 3, 0, 3, 7, 0, 7, 4, 1, 5, 6, 1, 6, 2];
+          const j = [1, 2, 3, 3, 0, 0, 5, 6, 7, 7, 4, 4, 4, 5, 1, 1, 0, 0, 6, 7, 3, 3, 2, 2, 3, 7, 4, 4, 0, 0, 5, 6, 2, 2, 1, 1];
+          const k = [2, 3, 0, 0, 1, 1, 6, 7, 4, 4, 5, 5, 5, 1, 0, 0, 4, 4, 7, 3, 2, 2, 6, 6, 7, 4, 0, 0, 3, 3, 6, 2, 1, 1, 5, 5];
+          
+          // Create hovertext that includes file name if available
+          const hovertext = 
+            \`Station: \${log.Station}<br>\` +
+            \`Elevation: \${log.StartElevation} to \${log.EndElevation}<br>\` +
+            \`Description: \${log.SoilDescription}\` + 
+            (log.FileName ? \`<br>Source: \${log.FileName}\` : '');
+          
+          const boxTrace = {
+            type: 'mesh3d',
+            x: x,
+            y: y,
+            z: z,
+            i: i,
+            j: j,
+            k: k,
+            color: log.Color,
+            opacity: 0.8,
+            hoverinfo: 'text',
+            hovertext: hovertext,
+            name: 'Boring Log'
+          };
+          
+          traces.push(boxTrace);
+        });
+        
+        return traces;
+      }
+
+      // Function to prepare boring log data for 2D visualization
+      function prepareBoringLogsFor2D() {
+        if (!boringLogData || boringLogData.length === 0) return [];
+        
+        // Group boring logs by station for better visualization
+        const stationGroups = {};
+        
+        boringLogData.forEach(log => {
+          if (!stationGroups[log.Station]) {
+            stationGroups[log.Station] = [];
+          }
+          stationGroups[log.Station].push(log);
+        });
+        
+        const traces = [];
+        
+        // Create a separate trace for each station
+        Object.entries(stationGroups).forEach(([station, logs]) => {
+          // Only show boring logs that are within the HDD range
+          if (entryPoint && exitPoint && 
+              (Number(station) < entryPoint.Away || Number(station) > exitPoint.Away)) {
+            return;
+          }
+          
+          // Sort logs by elevation (highest to lowest)
+          logs.sort((a, b) => b.StartElevation - a.StartElevation);
+          
+          logs.forEach(log => {
+            // For 2D profile, use the same 15' length as in 3D view
+            const halfLength = 7.5; // 15' total length, 7.5' on each side
+            
+            // Create hovertext that includes file name if available
+            const hovertext = 
+              \`Station: \${log.Station}<br>\` +
+              \`Elevation: \${log.StartElevation} to \${log.EndElevation}<br>\` +
+              \`Description: \${log.SoilDescription}\` + 
+              (log.FileName ? \`<br>Source: \${log.FileName}\` : '');
+              
+            const trace = {
+              type: 'scatter',
+              mode: 'lines',
+              x: [Number(station) - halfLength, Number(station) + halfLength, Number(station) + halfLength, Number(station) - halfLength, Number(station) - halfLength],
+              y: [log.StartElevation, log.StartElevation, log.EndElevation, log.EndElevation, log.StartElevation],
+              fill: 'toself',
+              fillcolor: log.Color,
+              line: {
+                color: 'black',
+                width: 1
+              },
+              hoverinfo: 'text',
+              hovertext: hovertext,
+              name: 'Boring Log',
+              showlegend: false
+            };
+            
+            traces.push(trace);
+          });
+        });
+        
+        return traces;
+      }
+
       // Function to calculate depth to surface for each joint
       function calculateDepthToSurface() {
         if (!surfaceData || surfaceData.length === 0) return Array(hddData.length).fill("N/A");
@@ -1031,6 +1431,15 @@ const HddGeneratorApp = () => {
           traces3D.push(surfaceTrace);
         }
 
+        // 5. Add boring log data if available and enabled
+        if (boringLogData.length > 0 && showBoringLogs) {
+          const boringLogTraces = prepareBoringLogsFor3D();
+          boringLogTraces.forEach(trace => {
+            trace.visible = showBoringLogs ? true : "legendonly";
+            traces3D.push(trace);
+          });
+        }
+
         // 3D Plot layout
         const layout3d = {
           title: {
@@ -1122,6 +1531,15 @@ const HddGeneratorApp = () => {
         };
 
         const traces2D = [profile];
+
+        // Add boring log data to 2D plot if available and enabled
+        if (boringLogData.length > 0 && showBoringLogs) {
+          const boringLogTraces2D = prepareBoringLogsFor2D();
+          boringLogTraces2D.forEach(trace => {
+            trace.visible = showBoringLogs ? true : "legendonly";
+            traces2D.push(trace);
+          });
+        }
 
         // Add surface profile to 2D plot if surface data exists
         if (surfaceData && surfaceData.length > 0) {
@@ -1408,7 +1826,41 @@ const HddGeneratorApp = () => {
           }
         });
           
-                  // Surface is always shown - no toggle needed
+        // Toggle boring logs visibility
+        document.getElementById("toggleBoringLogsBtn").addEventListener("click", function () {
+          showBoringLogs = !showBoringLogs;
+          
+          // Update visibility for boring log traces in 3D
+          const plot3d = document.getElementById("plot3d");
+          const boringLogIndices = [];
+          
+          plot3d.data.forEach((trace, index) => {
+            if (trace.name === 'Boring Log') {
+              boringLogIndices.push(index);
+            }
+          });
+          
+          if (boringLogIndices.length > 0) {
+            Plotly.restyle("plot3d", { visible: showBoringLogs ? true : "legendonly" }, boringLogIndices);
+          }
+          
+          // Update boring logs in 2D plot
+          const plot2d = document.getElementById("plot2d");
+          const boringLog2DIndices = [];
+          
+          plot2d.data.forEach((trace, index) => {
+            if (trace.name === 'Boring Log') {
+              boringLog2DIndices.push(index);
+            }
+          });
+          
+          if (boringLog2DIndices.length > 0) {
+            Plotly.restyle("plot2d", { visible: showBoringLogs ? true : "legendonly" }, boringLog2DIndices);
+          }
+          
+          // Show notification
+          showNotification(showBoringLogs ? "Boring logs visible" : "Boring logs hidden");
+        });
           
         // Zoom in button
         document.getElementById("zoomInBtn").addEventListener("click", function () {
@@ -1503,6 +1955,29 @@ const HddGeneratorApp = () => {
       setTimeout(() => {
         onSuccess("ok", null);
       }, 0);
+    },
+  };
+
+  const customBoringLogUploadProps = {
+    name: "boringLogFiles",
+    accept: ".xlsx, .xls",
+    multiple: true,
+    onChange: handleBoringLogFileChange,
+    fileList: boringLogFileList,
+    customRequest: ({ file, onSuccess }) => {
+      // Simulate a successful upload after a short delay
+      setTimeout(() => {
+        onSuccess("ok");
+      }, 100);
+    },
+    onRemove: (file) => {
+      // Handle file removal manually
+      const index = boringLogFileList.indexOf(file);
+      const newFileList = boringLogFileList.slice();
+      newFileList.splice(index, 1);
+      setBoringLogFileList(newFileList);
+      setIsBoringLogReady(false);
+      return true;
     },
   };
 
@@ -1641,6 +2116,84 @@ const HddGeneratorApp = () => {
                   />
                 )}
 
+                <Divider />
+
+                <Title level={4}>Upload Boring Log Data (Optional)</Title>
+                <Paragraph>
+                  Optionally, select one or more Excel files with boring log
+                  data. Each file should contain the following columns:
+                </Paragraph>
+                <ul className="list-disc pl-8 mb-4 text-gray-700">
+                  <li>STA (Station)</li>
+                  <li>Zone Start Elevation (ft)</li>
+                  <li>Zone End Elevation (ft)</li>
+                  <li>Soil Description per Geotech Logs / Report</li>
+                </ul>
+
+                <Alert
+                  message="Multiple Files Support"
+                  description="You can upload multiple boring log files. Each file will be processed and combined into a single visualization."
+                  type="info"
+                  showIcon
+                  className="mb-4"
+                />
+
+                <Dragger {...customBoringLogUploadProps} className="mb-6">
+                  <p className="ant-upload-drag-icon">
+                    <FileExcelOutlined
+                      style={{ fontSize: "32px", color: "#1890ff" }}
+                    />
+                  </p>
+                  <p className="ant-upload-text">
+                    Click or drag boring log Excel files here
+                  </p>
+                  <p className="ant-upload-hint">
+                    Support for multiple Excel files (.xlsx, .xls)
+                  </p>
+                </Dragger>
+
+                {boringLogErrorMessage && (
+                  <Alert
+                    message="Error"
+                    description={boringLogErrorMessage}
+                    type="error"
+                    showIcon
+                    className="mt-4"
+                  />
+                )}
+
+                {boringLogSuccessMessage && (
+                  <Alert
+                    message="Boring Log Data Processed Successfully"
+                    description={boringLogSuccessMessage}
+                    type="success"
+                    showIcon
+                    className="mt-4"
+                    icon={<CheckCircleOutlined />}
+                  />
+                )}
+
+                {/* New "Process Boring Log Data" button */}
+                <Button
+                  type="primary"
+                  onClick={processBoringLogExcelFile}
+                  disabled={
+                    boringLogFileList.length === 0 || isBoringLogProcessing
+                  }
+                  icon={
+                    isBoringLogProcessing ? <Spin indicator={antIcon} /> : null
+                  }
+                  size="large"
+                  block
+                  style={{ marginTop: "20px", marginBottom: "10px" }}
+                >
+                  {isBoringLogProcessing
+                    ? "Processing Boring Log Data..."
+                    : `Process ${boringLogFileList.length} Boring Log File${
+                        boringLogFileList.length !== 1 ? "s" : ""
+                      }`}
+                </Button>
+
                 {/* New "Process Surface Data" button */}
                 <Button
                   type="primary"
@@ -1759,7 +2312,43 @@ const HddGeneratorApp = () => {
                       </Panel>
                     )}
 
-                    <Panel header="Visualization Features" key="3">
+                    {isBoringLogReady && (
+                      <Panel header="Boring Log Data" key="3">
+                        <Space direction="vertical" className="w-full">
+                          <Text>
+                            Total Soil/Rock Layers:{" "}
+                            <Text strong>{boringLogData.length}</Text>
+                          </Text>
+                          <Text>
+                            Number of Stations:{" "}
+                            <Text strong>
+                              {
+                                new Set(boringLogData.map((d) => d.Station))
+                                  .size
+                              }
+                            </Text>
+                          </Text>
+                          <Text>
+                            Elevation Range:{" "}
+                            <Text strong>
+                              {Math.min(
+                                ...boringLogData.map((d) => d.EndElevation)
+                              ).toFixed(2)}{" "}
+                              ft to{" "}
+                              {Math.max(
+                                ...boringLogData.map((d) => d.StartElevation)
+                              ).toFixed(2)}{" "}
+                              ft
+                            </Text>
+                          </Text>
+                          <Text>
+                            Boring logs will be visualized along the bore path.
+                          </Text>
+                        </Space>
+                      </Panel>
+                    )}
+
+                    <Panel header="Visualization Features" key="4">
                       <ul className="list-disc pl-8 mb-4 text-gray-700">
                         <li>Interactive 3D bore path visualization</li>
                         <li>2D profile view of the bore path</li>
@@ -1774,6 +2363,13 @@ const HddGeneratorApp = () => {
                               Calculation of pipe depth relative to surface
                             </li>
                             <li>Centerline that follows surface elevation</li>
+                          </>
+                        )}
+                        {isBoringLogReady && (
+                          <>
+                            <li>Soil/rock layers at boring log stations</li>
+                            <li>Color-coded layer visualization</li>
+                            <li>Detailed soil information on hover</li>
                           </>
                         )}
                       </ul>
@@ -1827,8 +2423,8 @@ const HddGeneratorApp = () => {
                   </li>
                   <li>Use the zoom buttons or mouse wheel to zoom in/out</li>
                   <li>
-                    Toggle the visibility of surface data and centerline with
-                    the buttons
+                    Toggle the visibility of boring logs, surface data and
+                    centerline with the buttons
                   </li>
                   <li>
                     View bore path depth relative to surface in the data table
@@ -1836,6 +2432,9 @@ const HddGeneratorApp = () => {
                   <li>
                     Use the front and top view buttons for predefined
                     perspectives
+                  </li>
+                  <li>
+                    Hover over soil/rock layers to see detailed information
                   </li>
                 </ul>
 
@@ -1848,10 +2447,13 @@ const HddGeneratorApp = () => {
                       setFileName("");
                       setSurfaceFile(null);
                       setSurfaceFileName("");
+                      setBoringLogFileList([]);
                       setIsReady(false);
                       setIsSurfaceReady(false);
+                      setIsBoringLogReady(false);
                       setErrorMessage("");
                       setSurfaceErrorMessage("");
+                      setBoringLogErrorMessage("");
                       setCurrentStep(0);
                     }}
                   >
