@@ -16,8 +16,6 @@ import {
   Modal,
   Form,
   Collapse,
-  Col,
-  Row,
 } from "antd";
 import {
   FileExcelOutlined,
@@ -25,7 +23,6 @@ import {
   DownloadOutlined,
   LoadingOutlined,
   QuestionCircleOutlined,
-  DeleteOutlined,
 } from "@ant-design/icons";
 
 const { Title, Text, Paragraph } = Typography;
@@ -39,7 +36,6 @@ const HddGeneratorApp = () => {
   const [file, setFile] = useState(null);
   const [fileName, setFileName] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isReady, setIsReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [hddData, setHddData] = useState([]);
   const [currentStep, setCurrentStep] = useState(0);
@@ -54,8 +50,6 @@ const HddGeneratorApp = () => {
   const [isSurfaceProcessing, setIsSurfaceProcessing] = useState(false);
   const [isSurfaceReady, setIsSurfaceReady] = useState(false);
   const [surfaceErrorMessage, setSurfaceErrorMessage] = useState("");
-  const [surfaceSuccessMessage, setSurfaceSuccessMessage] = useState("");
-  const [showSurfaceData, setShowSurfaceData] = useState(true);
   const [entryPoint, setEntryPoint] = useState(null);
   const [exitPoint, setExitPoint] = useState(null);
 
@@ -65,12 +59,30 @@ const HddGeneratorApp = () => {
   const [isBoringLogProcessing, setIsBoringLogProcessing] = useState(false);
   const [isBoringLogReady, setIsBoringLogReady] = useState(false);
   const [boringLogErrorMessage, setBoringLogErrorMessage] = useState("");
-  const [boringLogSuccessMessage, setBoringLogSuccessMessage] = useState("");
-  const [showBoringLogs, setShowBoringLogs] = useState(true);
 
   const handleBoringLogFileChange = (info) => {
-    // Update fileList state
-    setBoringLogFileList(info.fileList);
+    // Check if this is a new upload session or just status updates
+    const hasNewFiles = info.fileList.some(
+      (file) => !boringLogFileList.find((existing) => existing.uid === file.uid)
+    );
+
+    if (hasNewFiles) {
+      // Create a new array with only unique files
+      const uniqueFiles = [];
+      const uniqueIds = new Set();
+
+      info.fileList.forEach((file) => {
+        if (!uniqueIds.has(file.uid)) {
+          uniqueIds.add(file.uid);
+          uniqueFiles.push(file);
+        }
+      });
+
+      setBoringLogFileList(uniqueFiles);
+    } else {
+      // Only status update, keep existing list
+      setBoringLogFileList(info.fileList);
+    }
 
     // Set status messages based on file changes
     const { status } = info.file;
@@ -82,9 +94,8 @@ const HddGeneratorApp = () => {
     }
 
     // Clear previous processing results when files change
-    if (info.fileList.length !== boringLogFileList.length) {
+    if (hasNewFiles) {
       setBoringLogErrorMessage("");
-      setBoringLogSuccessMessage("");
       setIsBoringLogReady(false);
     }
   };
@@ -244,13 +255,11 @@ const HddGeneratorApp = () => {
         await processBoringLogExcelFile();
       }
 
-      setIsReady(true);
       setCurrentStep(1);
       message.success("Data processed successfully!");
     } catch (error) {
       console.error("Error processing Excel file:", error);
       setErrorMessage(error.message || "Error processing Excel file");
-      setIsReady(false);
       message.error(error.message || "Error processing Excel file");
     } finally {
       setIsProcessing(false);
@@ -265,9 +274,11 @@ const HddGeneratorApp = () => {
 
     setIsSurfaceProcessing(true);
     setSurfaceErrorMessage("");
-    setSurfaceSuccessMessage("");
 
     try {
+      // Add a small delay to simulate processing
+      await new Promise((resolve) => setTimeout(resolve, 800));
+
       const data = await surfaceFile.arrayBuffer();
       const workbook = XLSX.read(data, { type: "array" });
 
@@ -354,7 +365,6 @@ const HddGeneratorApp = () => {
       // Store the parsed surface data
       setSurfaceData(parsedSurfaceData);
       setIsSurfaceReady(true);
-      setShowSurfaceData(true); // Always show the surface
 
       // Display success messages
       message.success({
@@ -363,15 +373,15 @@ const HddGeneratorApp = () => {
         icon: <CheckCircleOutlined style={{ color: "#52c41a" }} />,
       });
 
-      // Set success message for Alert component
-      const successMessage = `Successfully processed ${
-        parsedSurfaceData.length
-      } surface data points. 
-        Station range: ${Math.min(
-          ...parsedSurfaceData.map((d) => d.Station)
-        ).toFixed(2)} to 
-        ${Math.max(...parsedSurfaceData.map((d) => d.Station)).toFixed(2)} ft.`;
-      setSurfaceSuccessMessage(successMessage);
+      // Show notification
+      const notification = document.getElementById("notification");
+      if (notification) {
+        notification.textContent = `Surface data processed: ${parsedSurfaceData.length} points`;
+        notification.style.display = "block";
+        setTimeout(() => {
+          notification.style.display = "none";
+        }, 5000);
+      }
     } catch (error) {
       console.error("Error processing surface Excel file:", error);
       setSurfaceErrorMessage(
@@ -379,6 +389,19 @@ const HddGeneratorApp = () => {
       );
       setIsSurfaceReady(false);
       message.error(error.message || "Error processing surface Excel file");
+
+      // Show error notification
+      const notification = document.getElementById("notification");
+      if (notification) {
+        notification.textContent =
+          error.message || "Error processing surface Excel file";
+        notification.classList.add("error");
+        notification.style.display = "block";
+        setTimeout(() => {
+          notification.style.display = "none";
+          notification.classList.remove("error");
+        }, 5000);
+      }
     } finally {
       setIsSurfaceProcessing(false);
     }
@@ -392,7 +415,6 @@ const HddGeneratorApp = () => {
 
     setIsBoringLogProcessing(true);
     setBoringLogErrorMessage("");
-    setBoringLogSuccessMessage("");
 
     try {
       // Initialize with empty array to collect all boring log data
@@ -534,7 +556,6 @@ const HddGeneratorApp = () => {
       // Store the combined parsed boring log data
       setBoringLogData(allBoringLogData);
       setIsBoringLogReady(true);
-      setShowBoringLogs(true);
 
       // Display success messages
       message.success({
@@ -542,14 +563,6 @@ const HddGeneratorApp = () => {
         duration: 4,
         icon: <CheckCircleOutlined style={{ color: "#52c41a" }} />,
       });
-
-      // Set success message for Alert component
-      const successMessage = `Successfully processed ${
-        allBoringLogData.length
-      } boring log data points at ${
-        new Set(allBoringLogData.map((d) => d.Station)).size
-      } unique stations from ${boringLogFileList.length} files.`;
-      setBoringLogSuccessMessage(successMessage);
     } catch (error) {
       console.error("Error processing boring log Excel file:", error);
       setBoringLogErrorMessage(
@@ -674,9 +687,14 @@ const HddGeneratorApp = () => {
         margin-bottom: 10px;
         flex-wrap: wrap;
         align-items: center;
-        justify-content: flex-start;
       }
-      .control-btn {
+      .surface-toggle {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      button {
         padding: 8px 15px;
         background-color: #007bff;
         color: white;
@@ -684,16 +702,9 @@ const HddGeneratorApp = () => {
         border-radius: 4px;
         cursor: pointer;
         transition: background-color 0.3s;
-        min-width: 140px;
-        text-align: center;
       }
-      .control-btn:hover {
+      button:hover {
         background-color: #0056b3;
-      }
-      .control-btn:disabled {
-        background-color: #cccccc;
-        cursor: not-allowed;
-        opacity: 0.7;
       }
       .legend {
         display: flex;
@@ -784,14 +795,6 @@ const HddGeneratorApp = () => {
         justify-content: center;
         font-weight: bold;
         box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-        background-color: #007bff;
-        color: white;
-        border: none;
-        cursor: pointer;
-        transition: background-color 0.3s;
-      }
-      .zoom-btn:hover {
-        background-color: #0056b3;
       }
       /* Arrow styles for zoom buttons */
       .zoom-in-arrow {
@@ -880,13 +883,11 @@ const HddGeneratorApp = () => {
       <div id="notification" class="notification"></div>
 
       <div class="controls">
-        <button id="resetViewBtn" class="control-btn">Reset View</button>
-        <button id="frontViewBtn" class="control-btn">Front View</button>
-        <button id="topViewBtn" class="control-btn">Top View</button>
-        <button id="toggleCenterlineBtn" class="control-btn">Toggle Centerline</button>
-        <button id="toggleBoringLogsBtn" class="control-btn" ${
-          boringLogData.length === 0 ? "disabled" : ""
-        }>Toggle Boring Logs</button>
+        <button id="resetViewBtn">Reset View</button>
+        <button id="frontViewBtn">Front View</button>
+        <button id="topViewBtn">Top View</button>
+        <button id="toggleCenterlineBtn">Toggle Centerline</button>
+        <button id="toggleBoringLogsBtn">Toggle Boring Logs</button>
       </div>
 
       <div class="legend">
@@ -1014,8 +1015,7 @@ const HddGeneratorApp = () => {
       // State variables
       let showSurface = ${isSurfaceReady && surfaceData.length > 0};
       let showCenterline = true;
-      let showBoringLogs = ${boringLogData.length > 0}; 
-      let boringLogsAvailable = ${boringLogData.length > 0};
+      let showBoringLogs = ${isBoringLogReady && boringLogData.length > 0};
       let selectedJointIndex = -1;
 
       // Function to show notification
@@ -1201,9 +1201,9 @@ const HddGeneratorApp = () => {
         };
       }
 
-      // Function to prepare boring log data for visualization
+      // Function to prepare boring log data for 3D visualization
       function prepareBoringLogsFor3D() {
-        if (!boringLogsAvailable) return [];
+        if (!boringLogData || boringLogData.length === 0) return [];
         
         const traces = [];
         
@@ -1271,7 +1271,7 @@ const HddGeneratorApp = () => {
 
       // Function to prepare boring log data for 2D visualization
       function prepareBoringLogsFor2D() {
-        if (!boringLogsAvailable) return [];
+        if (!boringLogData || boringLogData.length === 0) return [];
         
         // Group boring logs by station for better visualization
         const stationGroups = {};
@@ -1448,7 +1448,7 @@ const HddGeneratorApp = () => {
         }
 
         // 5. Add boring log data if available and enabled
-        if (boringLogsAvailable) {
+        if (boringLogData.length > 0 && showBoringLogs) {
           const boringLogTraces = prepareBoringLogsFor3D();
           boringLogTraces.forEach(trace => {
             trace.visible = showBoringLogs ? true : "legendonly";
@@ -1549,7 +1549,7 @@ const HddGeneratorApp = () => {
         const traces2D = [profile];
 
         // Add boring log data to 2D plot if available and enabled
-        if (boringLogsAvailable) {
+        if (boringLogData.length > 0 && showBoringLogs) {
           const boringLogTraces2D = prepareBoringLogsFor2D();
           boringLogTraces2D.forEach(trace => {
             trace.visible = showBoringLogs ? true : "legendonly";
@@ -1844,11 +1844,6 @@ const HddGeneratorApp = () => {
           
         // Toggle boring logs visibility
         document.getElementById("toggleBoringLogsBtn").addEventListener("click", function () {
-          if (!boringLogsAvailable) {
-            showNotification("No boring log data available", true);
-            return;
-          }
-          
           showBoringLogs = !showBoringLogs;
           
           // Update visibility for boring log traces in 3D
@@ -1947,12 +1942,15 @@ const HddGeneratorApp = () => {
     name: "file",
     accept: ".xlsx, .xls",
     showUploadList: false,
-    beforeUpload: (file) => {
-      setFile(file);
-      setFileName(file.name);
-      setErrorMessage("");
-      setIsReady(false);
-      return false;
+    onChange: (info) => {
+      if (info.file.status === "done") {
+        setFile(info.file.originFileObj);
+        setFileName(info.file.name);
+        setErrorMessage("");
+        message.success(`${info.file.name} file uploaded successfully`);
+      } else if (info.file.status === "error") {
+        message.error(`${info.file.name} file upload failed.`);
+      }
     },
     customRequest: ({ file, onSuccess }) => {
       setTimeout(() => {
@@ -1965,12 +1963,16 @@ const HddGeneratorApp = () => {
     name: "surfaceFile",
     accept: ".xlsx, .xls",
     showUploadList: false,
-    beforeUpload: (file) => {
-      setSurfaceFile(file);
-      setSurfaceFileName(file.name);
-      setSurfaceErrorMessage("");
-      setIsSurfaceReady(false);
-      return false;
+    onChange: (info) => {
+      if (info.file.status === "done") {
+        setSurfaceFile(info.file.originFileObj);
+        setSurfaceFileName(info.file.name);
+        setSurfaceErrorMessage("");
+        setIsSurfaceReady(false);
+        message.success(`${info.file.name} surface file uploaded successfully`);
+      } else if (info.file.status === "error") {
+        message.error(`${info.file.name} surface file upload failed.`);
+      }
     },
     customRequest: ({ file, onSuccess }) => {
       setTimeout(() => {
@@ -2008,10 +2010,7 @@ const HddGeneratorApp = () => {
     <Layout className="min-h-screen">
       <Header className="bg-blue-700">
         <div className="mx-auto max-w-6xl px-4">
-          <Title
-            level={3}
-            style={{ color: "white", margin: "0", padding: "16px 0" }}
-          >
+          <Title level={3} className="text-white my-0 py-4">
             HDD Bore Geometry Visualization Generator
           </Title>
         </div>
@@ -2019,6 +2018,13 @@ const HddGeneratorApp = () => {
 
       <Content className="bg-gray-100 py-8">
         <div className="mx-auto max-w-3xl px-4">
+          {/* Notification container */}
+          <div
+            id="notification"
+            className="notification"
+            style={{ display: "none" }}
+          ></div>
+
           <Card className="mb-6 shadow-md">
             <Steps current={currentStep} className="mb-8">
               <Step title="Upload" description="Data files" />
@@ -2027,294 +2033,203 @@ const HddGeneratorApp = () => {
             </Steps>
 
             {currentStep === 0 && (
-              <div className="h-full">
-                {/* First Section - Bore Data */}
-                <Row
-                  className="flex-row"
-                  gutter={24}
-                  style={{ minHeight: "600px" }}
+              <div>
+                <Title level={4}>Upload Bore & Surface Data</Title>
+                <Paragraph>
+                  Select an Excel file with HDD bore data. The file must contain
+                  the following columns:
+                </Paragraph>
+                <ul className="list-disc pl-8 mb-4 text-gray-700">
+                  <li>Joint # (or Joint)</li>
+                  <li>Length</li>
+                  <li>Inclination</li>
+                  <li>L/R</li>
+                  <li>Raw Azi. (or Raw Azimuth, Azimuth, RawAzi)</li>
+                  <li>Away</li>
+                  <li>Elev. (or Elevation, Elev)</li>
+                </ul>
+
+                <Dragger {...customUploadProps} className="mb-6">
+                  <p className="ant-upload-drag-icon">
+                    <FileExcelOutlined
+                      style={{ fontSize: "32px", color: "#1890ff" }}
+                    />
+                  </p>
+                  <p className="ant-upload-text">
+                    Click or drag Excel file to this area to upload
+                  </p>
+                  <p className="ant-upload-hint">
+                    Support for single Excel file upload (.xlsx, .xls)
+                  </p>
+                </Dragger>
+
+                {fileName && (
+                  <Alert
+                    message={`Selected file: ${fileName}`}
+                    type="info"
+                    showIcon
+                    className="mb-4"
+                  />
+                )}
+
+                {errorMessage && (
+                  <Alert
+                    message="Error"
+                    description={errorMessage}
+                    type="error"
+                    showIcon
+                    className="mt-4 mb-4"
+                  />
+                )}
+
+                <Divider />
+
+                <Title level={4}>Upload Surface Data (Optional)</Title>
+                <Paragraph>
+                  Optionally, select an Excel file with surface data. The file
+                  should contain the following columns:
+                </Paragraph>
+                <ul className="list-disc pl-8 mb-4 text-gray-700">
+                  <li>Station (or STA)</li>
+                  <li>Elevation (or ELEV)</li>
+                </ul>
+
+                <Alert
+                  message="Optional Data"
+                  description="Surface data is optional. If provided, it will allow visualization of the bore path relative to the surface."
+                  type="info"
+                  showIcon
+                  className="mb-4"
+                />
+
+                <Dragger {...customSurfaceUploadProps} className="mb-6">
+                  <p className="ant-upload-drag-icon">
+                    <FileExcelOutlined
+                      style={{ fontSize: "32px", color: "#1890ff" }}
+                    />
+                  </p>
+                  <p className="ant-upload-text">
+                    Click or drag surface Excel file to this area to upload
+                  </p>
+                  <p className="ant-upload-hint">
+                    Support for single Excel file upload (.xlsx, .xls)
+                  </p>
+                </Dragger>
+
+                {surfaceFileName && (
+                  <Alert
+                    message={`Selected surface file: ${surfaceFileName}`}
+                    type="info"
+                    showIcon
+                    className="mb-4"
+                  />
+                )}
+
+                {surfaceErrorMessage && (
+                  <Alert
+                    message="Error"
+                    description={surfaceErrorMessage}
+                    type="error"
+                    showIcon
+                    className="mt-4"
+                  />
+                )}
+
+                <Divider />
+
+                <Title level={4}>Upload Boring Log Data (Optional)</Title>
+                <Paragraph>
+                  Optionally, select one or more Excel files with boring log
+                  data. Each file should contain the following columns:
+                </Paragraph>
+                <ul className="list-disc pl-8 mb-4 text-gray-700">
+                  <li>STA (Station)</li>
+                  <li>Zone Start Elevation (ft)</li>
+                  <li>Zone End Elevation (ft)</li>
+                  <li>Soil Description per Geotech Logs / Report</li>
+                </ul>
+
+                <Alert
+                  message="Multiple Files Support"
+                  description="You can upload multiple boring log files. Each file will be processed and combined into a single visualization."
+                  type="info"
+                  showIcon
+                  className="mb-4"
+                />
+
+                <Dragger {...customBoringLogUploadProps} className="mb-6">
+                  <p className="ant-upload-drag-icon">
+                    <FileExcelOutlined
+                      style={{ fontSize: "32px", color: "#1890ff" }}
+                    />
+                  </p>
+                  <p className="ant-upload-text">
+                    Click or drag boring log Excel files here
+                  </p>
+                  <p className="ant-upload-hint">
+                    Support for multiple Excel files (.xlsx, .xls)
+                  </p>
+                </Dragger>
+
+                {boringLogErrorMessage && (
+                  <Alert
+                    message="Error"
+                    description={boringLogErrorMessage}
+                    type="error"
+                    showIcon
+                    className="mt-4"
+                  />
+                )}
+
+                {/* New "Process Boring Log Data" button */}
+                <Button
+                  type="primary"
+                  onClick={processBoringLogExcelFile}
+                  disabled={
+                    boringLogFileList.length === 0 || isBoringLogProcessing
+                  }
+                  icon={
+                    isBoringLogProcessing ? <Spin indicator={antIcon} /> : null
+                  }
+                  size="large"
+                  block
+                  style={{ marginTop: "20px", marginBottom: "10px" }}
                 >
-                  <Col span={8} className="h-full">
-                    <div className="border rounded-lg p-4 h-full flex flex-col">
-                      <Title level={4}>Upload Bore & Surface Data</Title>
-                      <Paragraph>
-                        Select an Excel file with HDD bore data. The file must
-                        contain the following columns:
-                      </Paragraph>
-                      <ul className="list-disc pl-8 mb-4 text-gray-700">
-                        <li>Joint # (or Joint)</li>
-                        <li>Length</li>
-                        <li>Inclination</li>
-                        <li>L/R</li>
-                        <li>Raw Azi. (or Raw Azimuth, Azimuth, RawAzi)</li>
-                        <li>Away</li>
-                        <li>Elev. (or Elevation, Elev)</li>
-                      </ul>
-                    </div>
-                  </Col>
+                  {isBoringLogProcessing
+                    ? "Processing Boring Log Data..."
+                    : `Process ${boringLogFileList.length} Boring Log File${
+                        boringLogFileList.length !== 1 ? "s" : ""
+                      }`}
+                </Button>
 
-                  {/* Second Section - Surface Data */}
-                  <Col span={8} className="h-full">
-                    <div className="border rounded-lg p-4 h-full flex flex-col">
-                      <Title level={4}>Upload Surface Data (Optional)</Title>
-                      <Paragraph>
-                        Select an Excel file with surface data. The file should
-                        contain the following columns:
-                      </Paragraph>
-                      <ul className="list-disc pl-8 mb-4 text-gray-700">
-                        <li>Station (or STA)</li>
-                        <li>Elevation (or ELEV)</li>
-                      </ul>
+                {/* New "Process Surface Data" button */}
+                <Button
+                  type="primary"
+                  onClick={processSurfaceExcelFile}
+                  disabled={!surfaceFile || isSurfaceProcessing}
+                  icon={
+                    isSurfaceProcessing ? <Spin indicator={antIcon} /> : null
+                  }
+                  size="large"
+                  block
+                  style={{ marginTop: "20px", marginBottom: "10px" }}
+                >
+                  {isSurfaceProcessing
+                    ? "Processing Surface Data..."
+                    : "Process Surface Data"}
+                </Button>
 
-                      <Alert
-                        message="Optional Data"
-                        description="Surface data is optional. If provided, it will allow visualization of the bore path relative to the surface."
-                        type="info"
-                        showIcon
-                        className="mb-4"
-                      />
-                    </div>
-                  </Col>
-
-                  {/* Third Section - Boring Log Data */}
-                  <Col span={8} className="h-full">
-                    <div className="border rounded-lg p-4 h-full flex flex-col">
-                      <Title level={4}>Upload Boring Log Data (Optional)</Title>
-                      <Paragraph>
-                        Select one or more Excel files with boring log data.
-                        Each file should contain the following columns:
-                      </Paragraph>
-                      <ul className="list-disc pl-8 mb-4 text-gray-700">
-                        <li>STA (Station)</li>
-                        <li>Zone Start Elevation (ft)</li>
-                        <li>Zone End Elevation (ft)</li>
-                        <li>Soil Description per Geotech Logs / Report</li>
-                      </ul>
-
-                      <Alert
-                        message="Multiple Files Support"
-                        description="You can upload multiple boring log files. Each file will be processed and combined into a single visualization."
-                        type="info"
-                        showIcon
-                        className="mb-4"
-                      />
-                    </div>
-                  </Col>
-                </Row>
-                <Row>
-                  <Col span={8}>
-                    <Dragger
-                      {...customUploadProps}
-                      className="mb-6 flex-grow"
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <p className="ant-upload-drag-icon">
-                        <FileExcelOutlined
-                          style={{ fontSize: "32px", color: "#1890ff" }}
-                        />
-                      </p>
-                      <p className="ant-upload-text">
-                        Click or drag Excel file to this area to upload
-                      </p>
-                      <p className="ant-upload-hint">
-                        Support for single Excel file upload (.xlsx, .xls)
-                      </p>
-                    </Dragger>
-
-                    {fileName && (
-                      <div className="flex items-center justify-between bg-gray-50 p-2 rounded mb-4">
-                        <Text>{fileName}</Text>
-                        <Button
-                          type="text"
-                          danger
-                          icon={<DeleteOutlined />}
-                          onClick={() => {
-                            setFile(null);
-                            setFileName("");
-                            setIsReady(false);
-                          }}
-                        />
-                      </div>
-                    )}
-
-                    {errorMessage && (
-                      <Alert
-                        message="Error"
-                        description={errorMessage}
-                        type="error"
-                        showIcon
-                        className="mt-4 mb-4"
-                      />
-                    )}
-                  </Col>
-                  <Col span={8}>
-                    <Dragger
-                      {...customSurfaceUploadProps}
-                      className="mb-6 flex-grow"
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <p className="ant-upload-drag-icon">
-                        <FileExcelOutlined
-                          style={{ fontSize: "32px", color: "#1890ff" }}
-                        />
-                      </p>
-                      <p className="ant-upload-text">
-                        Click or drag surface Excel file to this area to upload
-                      </p>
-                      <p className="ant-upload-hint">
-                        Support for single Excel file upload (.xlsx, .xls)
-                      </p>
-                    </Dragger>
-
-                    {surfaceFileName && (
-                      <div className="flex items-center justify-between bg-gray-50 p-2 rounded mb-4">
-                        <Text>{surfaceFileName}</Text>
-                        <Button
-                          type="text"
-                          danger
-                          icon={<DeleteOutlined />}
-                          onClick={() => {
-                            setSurfaceFile(null);
-                            setSurfaceFileName("");
-                            setIsSurfaceReady(false);
-                          }}
-                        />
-                      </div>
-                    )}
-
-                    {surfaceErrorMessage && (
-                      <Alert
-                        message="Error"
-                        description={surfaceErrorMessage}
-                        type="error"
-                        showIcon
-                        className="mt-4 mb-4"
-                      />
-                    )}
-
-                    <Button
-                      type="primary"
-                      onClick={processSurfaceExcelFile}
-                      disabled={!surfaceFile || isSurfaceProcessing}
-                      icon={
-                        isSurfaceProcessing ? (
-                          <Spin indicator={antIcon} />
-                        ) : null
-                      }
-                      size="large"
-                      block
-                    >
-                      {isSurfaceProcessing
-                        ? "Processing Surface Data..."
-                        : "Process Surface Data"}
-                    </Button>
-                  </Col>
-                  <Col span={8}>
-                    <Dragger
-                      {...customBoringLogUploadProps}
-                      className="mb-6 flex-grow"
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <p className="ant-upload-drag-icon">
-                        <FileExcelOutlined
-                          style={{ fontSize: "32px", color: "#1890ff" }}
-                        />
-                      </p>
-                      <p className="ant-upload-text">
-                        Click or drag boring log Excel files here
-                      </p>
-                      <p className="ant-upload-hint">
-                        Support for multiple Excel files (.xlsx, .xls)
-                      </p>
-                    </Dragger>
-
-                    {boringLogFileList.length > 0 && (
-                      <div className="mb-4">
-                        {boringLogFileList.map((file, index) => (
-                          <div
-                            key={index}
-                            className="flex items-center justify-between bg-gray-50 p-2 rounded mb-2"
-                          >
-                            <Text>{file.name}</Text>
-                            <Button
-                              type="text"
-                              danger
-                              icon={<DeleteOutlined />}
-                              onClick={() => {
-                                const newFileList = boringLogFileList.filter(
-                                  (_, i) => i !== index
-                                );
-                                setBoringLogFileList(newFileList);
-                                if (newFileList.length === 0) {
-                                  setIsBoringLogReady(false);
-                                }
-                              }}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {boringLogErrorMessage && (
-                      <Alert
-                        message="Error"
-                        description={boringLogErrorMessage}
-                        type="error"
-                        showIcon
-                        className="mt-4 mb-4"
-                      />
-                    )}
-
-                    <Button
-                      type="primary"
-                      onClick={processBoringLogExcelFile}
-                      disabled={
-                        boringLogFileList.length === 0 || isBoringLogProcessing
-                      }
-                      icon={
-                        isBoringLogProcessing ? (
-                          <Spin indicator={antIcon} />
-                        ) : null
-                      }
-                      size="large"
-                      block
-                    >
-                      {isBoringLogProcessing
-                        ? "Processing Boring Log Data..."
-                        : `Process ${boringLogFileList.length} Boring Log File${
-                            boringLogFileList.length !== 1 ? "s" : ""
-                          }`}
-                    </Button>
-                  </Col>
-                </Row>
-
-                {/* Main Process Data Button - Below all sections */}
-                <Row>
-                  <div className="mt-8">
-                    <Button
-                      type="primary"
-                      onClick={processExcelFile}
-                      disabled={!file || isProcessing}
-                      icon={isProcessing ? <Spin indicator={antIcon} /> : null}
-                      size="large"
-                      block
-                    >
-                      {isProcessing ? "Processing..." : "Process Data"}
-                    </Button>
-                  </div>
-                </Row>
+                <Button
+                  type="primary"
+                  onClick={processExcelFile}
+                  disabled={!file || isProcessing}
+                  icon={isProcessing ? <Spin indicator={antIcon} /> : null}
+                  size="large"
+                  block
+                  style={{ marginTop: "20px" }}
+                >
+                  {isProcessing ? "Processing..." : "Process Data"}
+                </Button>
               </div>
             )}
 
@@ -2472,17 +2387,47 @@ const HddGeneratorApp = () => {
 
                 <Divider />
 
-                <Button
-                  type="primary"
-                  onClick={handleStartDownload}
-                  icon={<DownloadOutlined />}
-                  size="large"
-                  block
-                >
-                  Generate & Download HTML Visualization
-                </Button>
+                <Space className="w-full justify-between mb-4">
+                  <Button
+                    onClick={() => {
+                      // Clear all states
+                      setFile(null);
+                      setFileName("");
+                      setSurfaceFile(null);
+                      setSurfaceFileName("");
+                      setBoringLogFileList([]);
+                      setIsSurfaceReady(false);
+                      setIsBoringLogReady(false);
+                      setErrorMessage("");
+                      setSurfaceErrorMessage("");
+                      setBoringLogErrorMessage("");
 
-                <div className="mt-4">
+                      // Clear any visible notifications
+                      const notification =
+                        document.getElementById("notification");
+                      if (notification) {
+                        notification.style.display = "none";
+                        notification.classList.remove("error");
+                      }
+
+                      // Go back to first step
+                      setCurrentStep(0);
+                    }}
+                  >
+                    Start Over
+                  </Button>
+
+                  <Button
+                    type="primary"
+                    onClick={handleStartDownload}
+                    icon={<DownloadOutlined />}
+                    size="large"
+                  >
+                    Generate & Download HTML Visualization
+                  </Button>
+                </Space>
+
+                <div className="mt-2">
                   <Text type="secondary">
                     <QuestionCircleOutlined /> The visualization will open in
                     any modern web browser and doesn't require an internet
@@ -2536,17 +2481,27 @@ const HddGeneratorApp = () => {
                 <Space className="w-full">
                   <Button
                     onClick={() => {
+                      // Clear all states
                       setFile(null);
                       setFileName("");
                       setSurfaceFile(null);
                       setSurfaceFileName("");
                       setBoringLogFileList([]);
-                      setIsReady(false);
                       setIsSurfaceReady(false);
                       setIsBoringLogReady(false);
                       setErrorMessage("");
                       setSurfaceErrorMessage("");
                       setBoringLogErrorMessage("");
+
+                      // Clear any visible notifications
+                      const notification =
+                        document.getElementById("notification");
+                      if (notification) {
+                        notification.style.display = "none";
+                        notification.classList.remove("error");
+                      }
+
+                      // Go back to first step
                       setCurrentStep(0);
                     }}
                   >
