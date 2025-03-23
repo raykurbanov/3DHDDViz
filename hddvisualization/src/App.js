@@ -23,6 +23,7 @@ import {
   DownloadOutlined,
   LoadingOutlined,
   QuestionCircleOutlined,
+  DeleteOutlined,
 } from "@ant-design/icons";
 
 const { Title, Text, Paragraph } = Typography;
@@ -1987,7 +1988,10 @@ const HddGeneratorApp = () => {
     <Layout className="min-h-screen">
       <Header className="bg-blue-700">
         <div className="mx-auto max-w-6xl px-4">
-          <Title level={3} className="text-white my-0 py-4">
+          <Title
+            level={3}
+            style={{ color: "white", margin: "0", padding: "16px 0" }}
+          >
             HDD Bore Geometry Visualization Generator
           </Title>
         </div>
@@ -2003,225 +2007,249 @@ const HddGeneratorApp = () => {
             </Steps>
 
             {currentStep === 0 && (
-              <div>
-                <Title level={4}>Upload Bore & Surface Data</Title>
-                <Paragraph>
-                  Select an Excel file with HDD bore data. The file must contain
-                  the following columns:
-                </Paragraph>
-                <ul className="list-disc pl-8 mb-4 text-gray-700">
-                  <li>Joint # (or Joint)</li>
-                  <li>Length</li>
-                  <li>Inclination</li>
-                  <li>L/R</li>
-                  <li>Raw Azi. (or Raw Azimuth, Azimuth, RawAzi)</li>
-                  <li>Away</li>
-                  <li>Elev. (or Elevation, Elev)</li>
-                </ul>
+              <div className="flex flex-col gap-6">
+                {/* First Section - Bore Data */}
+                <div className="border rounded-lg p-4">
+                  <Title level={4}>Upload Bore & Surface Data</Title>
+                  <Paragraph>
+                    Select an Excel file with HDD bore data. The file must
+                    contain the following columns:
+                  </Paragraph>
+                  <ul className="list-disc pl-8 mb-4 text-gray-700">
+                    <li>Joint # (or Joint)</li>
+                    <li>Length</li>
+                    <li>Inclination</li>
+                    <li>L/R</li>
+                    <li>Raw Azi. (or Raw Azimuth, Azimuth, RawAzi)</li>
+                    <li>Away</li>
+                    <li>Elev. (or Elevation, Elev)</li>
+                  </ul>
 
-                <Dragger {...customUploadProps} className="mb-6">
-                  <p className="ant-upload-drag-icon">
-                    <FileExcelOutlined
-                      style={{ fontSize: "32px", color: "#1890ff" }}
+                  <Dragger {...customUploadProps} className="mb-6">
+                    <p className="ant-upload-drag-icon">
+                      <FileExcelOutlined
+                        style={{ fontSize: "32px", color: "#1890ff" }}
+                      />
+                    </p>
+                    <p className="ant-upload-text">
+                      Click or drag Excel file to this area to upload
+                    </p>
+                    <p className="ant-upload-hint">
+                      Support for single Excel file upload (.xlsx, .xls)
+                    </p>
+                  </Dragger>
+
+                  {fileName && (
+                    <div className="flex items-center justify-between bg-gray-50 p-2 rounded mb-4">
+                      <Text>{fileName}</Text>
+                      <Button
+                        type="text"
+                        danger
+                        icon={<DeleteOutlined />}
+                        onClick={() => {
+                          setFile(null);
+                          setFileName("");
+                          setIsReady(false);
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {errorMessage && (
+                    <Alert
+                      message="Error"
+                      description={errorMessage}
+                      type="error"
+                      showIcon
+                      className="mt-4 mb-4"
                     />
-                  </p>
-                  <p className="ant-upload-text">
-                    Click or drag Excel file to this area to upload
-                  </p>
-                  <p className="ant-upload-hint">
-                    Support for single Excel file upload (.xlsx, .xls)
-                  </p>
-                </Dragger>
+                  )}
+                </div>
 
-                {fileName && (
+                {/* Second Section - Surface Data */}
+                <div className="border rounded-lg p-4">
+                  <Title level={4}>Upload Surface Data (Optional)</Title>
+                  <Paragraph>
+                    Select an Excel file with surface data. The file should
+                    contain the following columns:
+                  </Paragraph>
+                  <ul className="list-disc pl-8 mb-4 text-gray-700">
+                    <li>Station (or STA)</li>
+                    <li>Elevation (or ELEV)</li>
+                  </ul>
+
                   <Alert
-                    message={`Selected file: ${fileName}`}
+                    message="Optional Data"
+                    description="Surface data is optional. If provided, it will allow visualization of the bore path relative to the surface."
                     type="info"
                     showIcon
                     className="mb-4"
                   />
-                )}
 
-                {errorMessage && (
-                  <Alert
-                    message="Error"
-                    description={errorMessage}
-                    type="error"
-                    showIcon
-                    className="mt-4 mb-4"
-                  />
-                )}
+                  <Dragger {...customSurfaceUploadProps} className="mb-6">
+                    <p className="ant-upload-drag-icon">
+                      <FileExcelOutlined
+                        style={{ fontSize: "32px", color: "#1890ff" }}
+                      />
+                    </p>
+                    <p className="ant-upload-text">
+                      Click or drag surface Excel file to this area to upload
+                    </p>
+                    <p className="ant-upload-hint">
+                      Support for single Excel file upload (.xlsx, .xls)
+                    </p>
+                  </Dragger>
 
-                <Divider />
+                  {surfaceFileName && (
+                    <div className="flex items-center justify-between bg-gray-50 p-2 rounded mb-4">
+                      <Text>{surfaceFileName}</Text>
+                      <Button
+                        type="text"
+                        danger
+                        icon={<DeleteOutlined />}
+                        onClick={() => {
+                          setSurfaceFile(null);
+                          setSurfaceFileName("");
+                          setIsSurfaceReady(false);
+                        }}
+                      />
+                    </div>
+                  )}
 
-                <Title level={4}>Upload Surface Data (Optional)</Title>
-                <Paragraph>
-                  Optionally, select an Excel file with surface data. The file
-                  should contain the following columns:
-                </Paragraph>
-                <ul className="list-disc pl-8 mb-4 text-gray-700">
-                  <li>Station (or STA)</li>
-                  <li>Elevation (or ELEV)</li>
-                </ul>
-
-                <Alert
-                  message="Optional Data"
-                  description="Surface data is optional. If provided, it will allow visualization of the bore path relative to the surface."
-                  type="info"
-                  showIcon
-                  className="mb-4"
-                />
-
-                <Dragger {...customSurfaceUploadProps} className="mb-6">
-                  <p className="ant-upload-drag-icon">
-                    <FileExcelOutlined
-                      style={{ fontSize: "32px", color: "#1890ff" }}
+                  {surfaceErrorMessage && (
+                    <Alert
+                      message="Error"
+                      description={surfaceErrorMessage}
+                      type="error"
+                      showIcon
+                      className="mt-4 mb-4"
                     />
-                  </p>
-                  <p className="ant-upload-text">
-                    Click or drag surface Excel file to this area to upload
-                  </p>
-                  <p className="ant-upload-hint">
-                    Support for single Excel file upload (.xlsx, .xls)
-                  </p>
-                </Dragger>
+                  )}
 
-                {surfaceFileName && (
+                  <Button
+                    type="primary"
+                    onClick={processSurfaceExcelFile}
+                    disabled={!surfaceFile || isSurfaceProcessing}
+                    icon={
+                      isSurfaceProcessing ? <Spin indicator={antIcon} /> : null
+                    }
+                    size="large"
+                    block
+                  >
+                    {isSurfaceProcessing
+                      ? "Processing Surface Data..."
+                      : "Process Surface Data"}
+                  </Button>
+                </div>
+
+                {/* Third Section - Boring Log Data */}
+                <div className="border rounded-lg p-4">
+                  <Title level={4}>Upload Boring Log Data (Optional)</Title>
+                  <Paragraph>
+                    Select one or more Excel files with boring log data. Each
+                    file should contain the following columns:
+                  </Paragraph>
+                  <ul className="list-disc pl-8 mb-4 text-gray-700">
+                    <li>STA (Station)</li>
+                    <li>Zone Start Elevation (ft)</li>
+                    <li>Zone End Elevation (ft)</li>
+                    <li>Soil Description per Geotech Logs / Report</li>
+                  </ul>
+
                   <Alert
-                    message={`Selected surface file: ${surfaceFileName}`}
+                    message="Multiple Files Support"
+                    description="You can upload multiple boring log files. Each file will be processed and combined into a single visualization."
                     type="info"
                     showIcon
                     className="mb-4"
                   />
-                )}
 
-                {surfaceErrorMessage && (
-                  <Alert
-                    message="Error"
-                    description={surfaceErrorMessage}
-                    type="error"
-                    showIcon
-                    className="mt-4"
-                  />
-                )}
+                  <Dragger {...customBoringLogUploadProps} className="mb-6">
+                    <p className="ant-upload-drag-icon">
+                      <FileExcelOutlined
+                        style={{ fontSize: "32px", color: "#1890ff" }}
+                      />
+                    </p>
+                    <p className="ant-upload-text">
+                      Click or drag boring log Excel files here
+                    </p>
+                    <p className="ant-upload-hint">
+                      Support for multiple Excel files (.xlsx, .xls)
+                    </p>
+                  </Dragger>
 
-                {surfaceSuccessMessage && (
-                  <Alert
-                    message="Surface Data Processed Successfully"
-                    description={surfaceSuccessMessage}
-                    type="success"
-                    showIcon
-                    className="mt-4"
-                    icon={<CheckCircleOutlined />}
-                  />
-                )}
+                  {boringLogFileList.length > 0 && (
+                    <div className="mb-4">
+                      {boringLogFileList.map((file, index) => (
+                        <div
+                          key={index}
+                          className="flex items-center justify-between bg-gray-50 p-2 rounded mb-2"
+                        >
+                          <Text>{file.name}</Text>
+                          <Button
+                            type="text"
+                            danger
+                            icon={<DeleteOutlined />}
+                            onClick={() => {
+                              const newFileList = boringLogFileList.filter(
+                                (_, i) => i !== index
+                              );
+                              setBoringLogFileList(newFileList);
+                              if (newFileList.length === 0) {
+                                setIsBoringLogReady(false);
+                              }
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
-                <Divider />
-
-                <Title level={4}>Upload Boring Log Data (Optional)</Title>
-                <Paragraph>
-                  Optionally, select one or more Excel files with boring log
-                  data. Each file should contain the following columns:
-                </Paragraph>
-                <ul className="list-disc pl-8 mb-4 text-gray-700">
-                  <li>STA (Station)</li>
-                  <li>Zone Start Elevation (ft)</li>
-                  <li>Zone End Elevation (ft)</li>
-                  <li>Soil Description per Geotech Logs / Report</li>
-                </ul>
-
-                <Alert
-                  message="Multiple Files Support"
-                  description="You can upload multiple boring log files. Each file will be processed and combined into a single visualization."
-                  type="info"
-                  showIcon
-                  className="mb-4"
-                />
-
-                <Dragger {...customBoringLogUploadProps} className="mb-6">
-                  <p className="ant-upload-drag-icon">
-                    <FileExcelOutlined
-                      style={{ fontSize: "32px", color: "#1890ff" }}
+                  {boringLogErrorMessage && (
+                    <Alert
+                      message="Error"
+                      description={boringLogErrorMessage}
+                      type="error"
+                      showIcon
+                      className="mt-4 mb-4"
                     />
-                  </p>
-                  <p className="ant-upload-text">
-                    Click or drag boring log Excel files here
-                  </p>
-                  <p className="ant-upload-hint">
-                    Support for multiple Excel files (.xlsx, .xls)
-                  </p>
-                </Dragger>
+                  )}
 
-                {boringLogErrorMessage && (
-                  <Alert
-                    message="Error"
-                    description={boringLogErrorMessage}
-                    type="error"
-                    showIcon
-                    className="mt-4"
-                  />
-                )}
+                  <Button
+                    type="primary"
+                    onClick={processBoringLogExcelFile}
+                    disabled={
+                      boringLogFileList.length === 0 || isBoringLogProcessing
+                    }
+                    icon={
+                      isBoringLogProcessing ? (
+                        <Spin indicator={antIcon} />
+                      ) : null
+                    }
+                    size="large"
+                    block
+                  >
+                    {isBoringLogProcessing
+                      ? "Processing Boring Log Data..."
+                      : `Process ${boringLogFileList.length} Boring Log File${
+                          boringLogFileList.length !== 1 ? "s" : ""
+                        }`}
+                  </Button>
+                </div>
 
-                {boringLogSuccessMessage && (
-                  <Alert
-                    message="Boring Log Data Processed Successfully"
-                    description={boringLogSuccessMessage}
-                    type="success"
-                    showIcon
-                    className="mt-4"
-                    icon={<CheckCircleOutlined />}
-                  />
-                )}
-
-                {/* New "Process Boring Log Data" button */}
-                <Button
-                  type="primary"
-                  onClick={processBoringLogExcelFile}
-                  disabled={
-                    boringLogFileList.length === 0 || isBoringLogProcessing
-                  }
-                  icon={
-                    isBoringLogProcessing ? <Spin indicator={antIcon} /> : null
-                  }
-                  size="large"
-                  block
-                  style={{ marginTop: "20px", marginBottom: "10px" }}
-                >
-                  {isBoringLogProcessing
-                    ? "Processing Boring Log Data..."
-                    : `Process ${boringLogFileList.length} Boring Log File${
-                        boringLogFileList.length !== 1 ? "s" : ""
-                      }`}
-                </Button>
-
-                {/* New "Process Surface Data" button */}
-                <Button
-                  type="primary"
-                  onClick={processSurfaceExcelFile}
-                  disabled={!surfaceFile || isSurfaceProcessing}
-                  icon={
-                    isSurfaceProcessing ? <Spin indicator={antIcon} /> : null
-                  }
-                  size="large"
-                  block
-                  style={{ marginTop: "20px", marginBottom: "10px" }}
-                >
-                  {isSurfaceProcessing
-                    ? "Processing Surface Data..."
-                    : "Process Surface Data"}
-                </Button>
-
-                <Button
-                  type="primary"
-                  onClick={processExcelFile}
-                  disabled={!file || isProcessing}
-                  icon={isProcessing ? <Spin indicator={antIcon} /> : null}
-                  size="large"
-                  block
-                  style={{ marginTop: "20px" }}
-                >
-                  {isProcessing ? "Processing..." : "Process Data"}
-                </Button>
+                {/* Main Process Data Button - Below all sections */}
+                <div className="mt-8">
+                  <Button
+                    type="primary"
+                    onClick={processExcelFile}
+                    disabled={!file || isProcessing}
+                    icon={isProcessing ? <Spin indicator={antIcon} /> : null}
+                    size="large"
+                    block
+                  >
+                    {isProcessing ? "Processing..." : "Process Data"}
+                  </Button>
+                </div>
               </div>
             )}
 
