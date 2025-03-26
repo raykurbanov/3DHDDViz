@@ -912,6 +912,24 @@ const HddGeneratorApp = () => {
         flex-wrap: wrap;
         gap: 10px;
       }
+      /* Soil layer method dropdown */
+      .soil-layer-method {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-left: 10px;
+      }
+      .soil-layer-method select {
+        padding: 6px 10px;
+        border-radius: 4px;
+        border: 1px solid #ccc;
+        background-color: white;
+        cursor: pointer;
+      }
+      .soil-layer-method label {
+        font-size: 14px;
+        font-weight: bold;
+      }
     </style>
   </head>
   <body>
@@ -929,6 +947,13 @@ const HddGeneratorApp = () => {
         <button id="topViewBtn">Top View</button>
         <button id="toggleCenterlineBtn">Toggle Centerline</button>
         <button id="toggleBoringLogsBtn">Toggle Boring Logs</button>
+        <div class="soil-layer-method">
+          <label for="soilLayerMethod">Soil Layer Method:</label>
+          <select id="soilLayerMethod">
+            <option value="depth">Depth to Surface</option>
+            <option value="elevation">Elevation</option>
+          </select>
+        </div>
       </div>
 
       <div class="legend">
@@ -1787,14 +1812,18 @@ const HddGeneratorApp = () => {
         });
       }
       
-      // Function to find expected soil layer for a joint based on the closest boring log and depth to surface
-      function findExpectedSoilLayer(joint, jointDepth) {
-        if (!boringLogData || boringLogData.length === 0 || jointDepth === "N/A") {
+      // Function to find expected soil layer for a joint based on the closest boring log and depth or elevation
+      function findExpectedSoilLayer(joint, jointDepth, method = 'depth') {
+        if (!boringLogData || boringLogData.length === 0) {
           return "No boring log data available";
         }
         
+        if (method === 'depth' && jointDepth === "N/A") {
+          return "No surface data available";
+        }
+        
         const jointAway = joint.Away;
-        const jointDepthValue = parseFloat(jointDepth);
+        const jointElev = joint.Elev;
         
         // Find the closest boring log based on station/away distance
         let closestLog = null;
@@ -1828,8 +1857,6 @@ const HddGeneratorApp = () => {
         // Sort logs by elevation (highest to lowest)
         const sortedLogs = [...closestLog.logs].sort((a, b) => b.StartElevation - a.StartElevation);
         
-        // Find the appropriate layer based on depth (not elevation)
-        // We need to convert from elevation to depth for the boring log layers
         // Get the surface elevation at the boring log station
         const surfaceElevation = interpolateElevation(closestLog.station, surfaceData);
         
@@ -1837,37 +1864,70 @@ const HddGeneratorApp = () => {
           return \`Cannot determine layer (no surface data at station \${closestLog.station.toFixed(2)})\`;
         }
         
-        // For each layer in the boring log, calculate its depth from surface
         let matchedLayer = null;
         
-        for (const layer of sortedLogs) {
-          // Convert elevations to depths
-          const layerStartDepth = surfaceElevation - layer.StartElevation;
-          const layerEndDepth = surfaceElevation - layer.EndElevation;
+        if (method === 'depth') {
+          // Method 1: Find the appropriate layer based on depth
+          const jointDepthValue = parseFloat(jointDepth);
           
-          // Check if joint depth is within this layer's depth range
-          if (jointDepthValue >= layerStartDepth && jointDepthValue <= layerEndDepth) {
-            matchedLayer = {
-              ...layer,
-              distanceAway: minDistance.toFixed(2),
-              layerStartDepth: layerStartDepth.toFixed(2),
-              layerEndDepth: layerEndDepth.toFixed(2)
-            };
-            break;
-          }
-        }
-        
-        // Check if the boring log is deep enough
-        if (!matchedLayer) {
-          // Find the deepest layer in the boring log
-          const deepestLayer = sortedLogs[sortedLogs.length - 1];
-          const maxDepth = surfaceElevation - deepestLayer.EndElevation;
-          
-          if (jointDepthValue > maxDepth) {
-            return \`Insufficient Boring Log Depth (max depth: \${maxDepth.toFixed(2)} ft at station \${closestLog.station.toFixed(2)} ft)\`;
+          // For each layer in the boring log, calculate its depth from surface
+          for (const layer of sortedLogs) {
+            // Convert elevations to depths
+            const layerStartDepth = surfaceElevation - layer.StartElevation;
+            const layerEndDepth = surfaceElevation - layer.EndElevation;
+            
+            // Check if joint depth is within this layer's depth range
+            if (jointDepthValue >= layerStartDepth && jointDepthValue <= layerEndDepth) {
+              matchedLayer = {
+                ...layer,
+                distanceAway: minDistance.toFixed(2),
+                layerStartDepth: layerStartDepth.toFixed(2),
+                layerEndDepth: layerEndDepth.toFixed(2),
+                method: 'depth'
+              };
+              break;
+            }
           }
           
-          return "No matching layer found";
+          // Check if the boring log is deep enough
+          if (!matchedLayer) {
+            // Find the deepest layer in the boring log
+            const deepestLayer = sortedLogs[sortedLogs.length - 1];
+            const maxDepth = surfaceElevation - deepestLayer.EndElevation;
+            
+            if (jointDepthValue > maxDepth) {
+              return \`Insufficient Boring Log Depth (max depth: \${maxDepth.toFixed(2)} ft at station \${closestLog.station.toFixed(2)} ft)\`;
+            }
+            
+            return "No matching layer found";
+          }
+        } else if (method === 'elevation') {
+          // Method 2: Find the appropriate layer based on elevation
+          // For each layer in the boring log, check if joint elevation is within layer elevation range
+          for (const layer of sortedLogs) {
+            if (jointElev <= layer.StartElevation && jointElev >= layer.EndElevation) {
+              matchedLayer = {
+                ...layer,
+                distanceAway: minDistance.toFixed(2),
+                method: 'elevation'
+              };
+              break;
+            }
+          }
+          
+          // Check if the boring log elevation range includes the joint elevation
+          if (!matchedLayer) {
+            const highestLayer = sortedLogs[0];
+            const lowestLayer = sortedLogs[sortedLogs.length - 1];
+            
+            if (jointElev > highestLayer.StartElevation) {
+              return \`Joint elevation (\${jointElev.toFixed(2)} ft) is above boring log (max: \${highestLayer.StartElevation.toFixed(2)} ft)\`;
+            } else if (jointElev < lowestLayer.EndElevation) {
+              return \`Joint elevation (\${jointElev.toFixed(2)} ft) is below boring log (min: \${lowestLayer.EndElevation.toFixed(2)} ft)\`;
+            }
+            
+            return "No matching layer found";
+          }
         }
         
         return {
@@ -1875,8 +1935,13 @@ const HddGeneratorApp = () => {
           color: matchedLayer.Color,
           boringStation: closestLog.station.toFixed(2),
           distance: matchedLayer.distanceAway,
-          layerStartDepth: matchedLayer.layerStartDepth,
-          layerEndDepth: matchedLayer.layerEndDepth
+          startElevation: matchedLayer.StartElevation.toFixed(2),
+          endElevation: matchedLayer.EndElevation.toFixed(2),
+          method: matchedLayer.method,
+          ...(matchedLayer.method === 'depth' ? {
+            layerStartDepth: matchedLayer.layerStartDepth,
+            layerEndDepth: matchedLayer.layerEndDepth
+          } : {})
         };
       }
 
@@ -1887,16 +1952,20 @@ const HddGeneratorApp = () => {
         console.log("Elevation values:", elev);
         console.log("LR values:", lr);
         
+        // Get selected soil layer method
+        const soilLayerMethodEl = document.getElementById("soilLayerMethod");
+        const soilLayerMethod = soilLayerMethodEl ? soilLayerMethodEl.value : 'depth';
+        
         // Calculate depthToSurface
         const depthToSurface = surfaceData.length > 0 ? calculateDepthToSurface() : Array(hddData.length).fill("N/A");
         
         // Find expected soil layers for each joint
         const expectedSoilLayers = hddData.map((joint, index) => {
-          return findExpectedSoilLayer(joint, depthToSurface[index]);
+          return findExpectedSoilLayer(joint, depthToSurface[index], soilLayerMethod);
         });
         
         // Update the joints table with depth and soil layer information
-        populateJointsTable(depthToSurface, expectedSoilLayers);
+        populateJointsTable(depthToSurface, expectedSoilLayers, soilLayerMethod);
 
         // 3D Plot traces
         const traces3D = [];
@@ -1920,19 +1989,24 @@ const HddGeneratorApp = () => {
               const soilLayer = expectedSoilLayers[i];
               
               if (typeof soilLayer === 'string') {
-                layerInfo = \`<br><b>Expected Soil Layer:</b> \${soilLayer}\`;
+                layerInfo = "<br><b>Expected Soil Layer:</b> " + soilLayer;
               } else if (soilLayer && typeof soilLayer === 'object') {
-                layerInfo = \`<br><b>Expected Soil Layer:</b> \${soilLayer.soilDescription}<br>\` +
-                  \`<b>From Boring Log:</b> Station \${soilLayer.boringStation} ft (\${soilLayer.distance} ft away)<br>\` +
-                  \`<b>Layer Depth:</b> \${soilLayer.layerStartDepth} to \${soilLayer.layerEndDepth} ft\`;
+                layerInfo = "<br><b>Expected Soil Layer:</b> " + soilLayer.soilDescription + "<br>" +
+                  "<b>From Boring Log:</b> Station " + soilLayer.boringStation + " ft (" + soilLayer.distance + " ft away)<br>";
+                
+                if (soilLayer.method === 'depth') {
+                  layerInfo += "<b>Layer Depth:</b> " + soilLayer.layerStartDepth + " to " + soilLayer.layerEndDepth + " ft";
+                } else {
+                  layerInfo += "<b>Layer Elevation:</b> " + soilLayer.startElevation + " to " + soilLayer.endElevation + " ft";
+                }
               }
               
-              return \`<b>Joint:</b> \${d.Joint}<br>\` +
-                \`<b>Away:</b> \${d.Away.toFixed(2)} ft<br>\` +
-                \`<b>Elevation:</b> \${d.Elev.toFixed(2)} ft<br>\` +
-                \`<b>Inclination:</b> \${d.Inclination.toFixed(2)}°<br>\` +
-                \`<b>L/R:</b> \${d.LR.toFixed(2)} ft<br>\` +
-                \`<b>Depth to Surface:</b> \${depthToSurface[i]} ft\${layerInfo}\`;
+              return "<b>Joint:</b> " + d.Joint + "<br>" +
+                "<b>Away:</b> " + d.Away.toFixed(2) + " ft<br>" +
+                "<b>Elevation:</b> " + d.Elev.toFixed(2) + " ft<br>" +
+                "<b>Inclination:</b> " + d.Inclination.toFixed(2) + "°<br>" +
+                "<b>L/R:</b> " + d.LR.toFixed(2) + " ft<br>" +
+                "<b>Depth to Surface:</b> " + depthToSurface[i] + " ft" + layerInfo;
             }
           ),
           customdata: hddData.map((d, i) => i)
@@ -2273,7 +2347,7 @@ const HddGeneratorApp = () => {
       }
 
       // Function to populate joints table
-      function populateJointsTable(depthToSurface, expectedSoilLayers) {
+      function populateJointsTable(depthToSurface, expectedSoilLayers, soilLayerMethod) {
         const tableBody = document.getElementById("jointsTableBody");
         tableBody.innerHTML = ""; // Clear existing rows
         
@@ -2370,7 +2444,11 @@ const HddGeneratorApp = () => {
             soilInfo.appendChild(boringInfo);
             
             const depthInfo = document.createElement("div");
-            depthInfo.innerHTML = "<b>Layer Depth:</b> " + soilLayer.layerStartDepth + " to " + soilLayer.layerEndDepth + " ft";
+            if (soilLayer.method === 'depth') {
+              depthInfo.innerHTML = "<b>Layer Depth:</b> " + soilLayer.layerStartDepth + " to " + soilLayer.layerEndDepth + " ft";
+            } else {
+              depthInfo.innerHTML = "<b>Layer Elevation:</b> " + soilLayer.startElevation + " to " + soilLayer.endElevation + " ft";
+            }
             soilInfo.appendChild(depthInfo);
             
             soilLayerCell.appendChild(soilInfo);
@@ -2388,6 +2466,22 @@ const HddGeneratorApp = () => {
           tableBody.appendChild(row);
         });
       }
+      
+      // Add event listener for soil layer method dropdown
+      document.addEventListener('DOMContentLoaded', function() {
+        const soilLayerMethodEl = document.getElementById("soilLayerMethod");
+        if (soilLayerMethodEl) {
+          soilLayerMethodEl.addEventListener('change', function() {
+            createPlots(); // Re-create the plots with the new soil layer method
+          });
+        }
+        
+        // Add event listeners for other controls
+        document.getElementById("toggleBoringLogsBtn").addEventListener("click", function() {
+          showBoringLogs = !showBoringLogs;
+          createPlots();
+        });
+      });
 
       function selectJoint(jointIndex) {
         if (jointIndex < 0 || jointIndex >= hddData.length) return;
@@ -2596,6 +2690,16 @@ const HddGeneratorApp = () => {
           };
           Plotly.relayout("plot3d", {"scene.camera.eye": newEye});
         });
+
+        // Soil Layer Method Dropdown
+        const soilLayerMethodEl = document.getElementById("soilLayerMethod");
+        if (soilLayerMethodEl) {
+          soilLayerMethodEl.addEventListener('change', function() {
+            // Show notification
+            showNotification("Soil layer method changed to: " + this.value);
+            createPlots(); // Re-create the plots with the new soil layer method
+          });
+        }
       }
 
       // Initialize the plots when the page loads
