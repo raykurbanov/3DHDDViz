@@ -16,6 +16,8 @@ import {
   Modal,
   Form,
   Collapse,
+  Radio,
+  InputNumber,
 } from "antd";
 import {
   FileExcelOutlined,
@@ -59,6 +61,15 @@ const HddGeneratorApp = () => {
   const [isBoringLogProcessing, setIsBoringLogProcessing] = useState(false);
   const [isBoringLogReady, setIsBoringLogReady] = useState(false);
   const [boringLogErrorMessage, setBoringLogErrorMessage] = useState("");
+
+  // Water body states - NEW
+  const [showWaterBody, setShowWaterBody] = useState("yes");
+  const [waterBodyData, setWaterBodyData] = useState({
+    beginStation: 620,
+    endStation: 841,
+    elevation: 900,
+    name: "River Crossing",
+  });
 
   const handleBoringLogFileChange = (info) => {
     // Check if this is a new upload session or just status updates
@@ -632,6 +643,10 @@ const HddGeneratorApp = () => {
         ? JSON.stringify(boringLogData)
         : "[]";
 
+    // Prepare water body data if enabled
+    const waterBodyJSON =
+      showWaterBody === "yes" ? JSON.stringify(waterBodyData) : "null";
+
     // Determine entry and exit points for center line
     const entryPointJSON = entryPoint ? JSON.stringify(entryPoint) : "null";
     const exitPointJSON = exitPoint ? JSON.stringify(exitPoint) : "null";
@@ -907,6 +922,10 @@ const HddGeneratorApp = () => {
           <div class="legend-color" style="background-color: rgba(255, 153, 0, 0.3)"></div>
           <span>Centerline Corridor (10ft)</span>
         </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background-color: rgba(0, 120, 255, 0.6)"></div>
+          <span>Water Body</span>
+        </div>
       </div>
 
       <!-- Soil Type Legend -->
@@ -998,6 +1017,9 @@ const HddGeneratorApp = () => {
       // Boring log data
       let boringLogData = ${boringLogDataJSON};
       
+      // Water body data
+      let waterBodyData = ${waterBodyJSON};
+      
       // Entry and exit points for centerline
       const entryPoint = ${entryPointJSON};
       const exitPoint = ${exitPointJSON};
@@ -1013,9 +1035,10 @@ const HddGeneratorApp = () => {
       });
 
       // State variables
-      let showSurface = ${isSurfaceReady && surfaceData.length > 0};
-      let showCenterline = true;
-      let showBoringLogs = ${isBoringLogReady && boringLogData.length > 0};
+      let showSurface = true; // Always show surface by default
+      let showBoringLogs = true; // Show boring logs by default
+      let showCenterline = true; // Show centerline by default
+      let showWaterBody = true; // Always show water body by default
       let selectedJointIndex = -1;
 
       // Function to show notification
@@ -1201,6 +1224,367 @@ const HddGeneratorApp = () => {
         };
       }
 
+      // Function to prepare water body for 3D visualization
+      function prepareWaterBodyFor3D() {
+        console.log("prepareWaterBodyFor3D called");
+        console.log("Water body data:", waterBodyData);
+        console.log("Surface data:", surfaceData ? surfaceData.length : 'none');
+        console.log("Show water body:", showWaterBody);
+        
+        if (!waterBodyData || !surfaceData || surfaceData.length === 0) {
+          console.log("Missing water body data or surface data - using simplified water body");
+          
+          // Create a simple water body even without surface data
+          const { beginStation, endStation, elevation, name } = waterBodyData;
+          
+          // Create a simple rectangular volume for the water body
+          // Use mesh3d with fully defined vertices for a solid appearance
+          const bottomElevation = elevation - 20; // Default 20ft below water surface
+          
+          // Define the 8 corners of the box
+          const x = [
+            beginStation, beginStation, endStation, endStation,
+            beginStation, beginStation, endStation, endStation
+          ];
+          
+          const y = [
+            -50, 50, 50, -50,
+            -50, 50, 50, -50
+          ];
+          
+          const z = [
+            elevation, elevation, elevation, elevation,
+            bottomElevation, bottomElevation, bottomElevation, bottomElevation
+          ];
+          
+          // Define the triangular faces of the cube
+          const i = [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 0, 4, 5, 0, 5, 1, 2, 6, 7, 2, 7, 3, 0, 3, 7, 0, 7, 4, 1, 5, 6, 1, 6, 2];
+          const j = [1, 2, 3, 3, 0, 0, 5, 6, 7, 7, 4, 4, 4, 5, 1, 1, 0, 0, 6, 7, 3, 3, 2, 2, 3, 7, 4, 4, 0, 0, 5, 6, 2, 2, 1, 1];
+          const k = [2, 3, 0, 0, 1, 1, 6, 7, 4, 4, 5, 5, 5, 1, 0, 0, 4, 4, 7, 3, 2, 2, 6, 6, 7, 4, 0, 0, 3, 3, 6, 2, 1, 1, 5, 5];
+          
+          const simpleWaterVolume = {
+            type: 'mesh3d',
+            x: x,
+            y: y,
+            z: z,
+            i: i,
+            j: j,
+            k: k,
+            flatshading: false,
+            color: '#0078ff',
+            opacity: 0.7,
+            name: 'Water Body',
+            hoverinfo: 'text',
+            hovertext: \`\${name}<br>Elevation: \${elevation.toFixed(2)} ft\`,
+            showlegend: true
+          };
+          
+          return [simpleWaterVolume];
+        }
+        
+        // Get water body parameters
+        const { beginStation, endStation, elevation, name } = waterBodyData;
+        
+        // Filter surface data to get points within the water body range
+        const waterBodySurfacePoints = surfaceData.filter(
+          point => point.Station >= beginStation && point.Station <= endStation
+        );
+        
+        if (waterBodySurfacePoints.length === 0) {
+          console.log("No surface points in water body range");
+          
+          // Create a simple water body with no surface points
+          const bottomElevation = elevation - 20; // Default 20ft below water surface
+          
+          // Define the 8 corners of the box
+          const x = [
+            beginStation, beginStation, endStation, endStation,
+            beginStation, beginStation, endStation, endStation
+          ];
+          
+          const y = [
+            -50, 50, 50, -50,
+            -50, 50, 50, -50
+          ];
+          
+          const z = [
+            elevation, elevation, elevation, elevation,
+            bottomElevation, bottomElevation, bottomElevation, bottomElevation
+          ];
+          
+          // Define the triangular faces of the cube
+          const i = [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 0, 4, 5, 0, 5, 1, 2, 6, 7, 2, 7, 3, 0, 3, 7, 0, 7, 4, 1, 5, 6, 1, 6, 2];
+          const j = [1, 2, 3, 3, 0, 0, 5, 6, 7, 7, 4, 4, 4, 5, 1, 1, 0, 0, 6, 7, 3, 3, 2, 2, 3, 7, 4, 4, 0, 0, 5, 6, 2, 2, 1, 1];
+          const k = [2, 3, 0, 0, 1, 1, 6, 7, 4, 4, 5, 5, 5, 1, 0, 0, 4, 4, 7, 3, 2, 2, 6, 6, 7, 4, 0, 0, 3, 3, 6, 2, 1, 1, 5, 5];
+          
+          const simpleWaterVolume = {
+            type: 'mesh3d',
+            x: x,
+            y: y,
+            z: z,
+            i: i,
+            j: j,
+            k: k,
+            flatshading: false,
+            color: '#0078ff',
+            opacity: 0.7,
+            name: 'Water Body',
+            hoverinfo: 'text',
+            hovertext: \`\${name}<br>Elevation: \${elevation.toFixed(2)} ft\`,
+            showlegend: true
+          };
+          
+          return [simpleWaterVolume];
+        }
+        
+        // Sort points by station for proper surface creation
+        const sortedPoints = [...waterBodySurfacePoints].sort((a, b) => a.Station - b.Station);
+        
+        // Width of water body (extend 50ft on each side of centerline)
+        const halfWidth = 50;
+        
+        // Create arrays to hold all vertices for the water volume
+        const vertices = {
+          x: [],
+          y: [],
+          z: []
+        };
+        
+        // Create triangulation indices
+        const i = [];
+        const j = [];
+        const k = [];
+        
+        // Define number of segments for the water body
+        const stationSegments = Math.max(20, sortedPoints.length);
+        const widthSegments = 10; // Number of segments across width
+        
+        // Calculate spacing
+        const stationStep = (endStation - beginStation) / (stationSegments - 1);
+        const widthStep = (halfWidth * 2) / (widthSegments - 1);
+        
+        // Create vertex grid for surface (top of water)
+        const topVertices = [];
+        const bottomVertices = [];
+        
+        // Generate vertices for top and bottom surfaces
+        for (let si = 0; si < stationSegments; si++) {
+          const station = beginStation + si * stationStep;
+          const surfaceElevation = interpolateElevation(station, sortedPoints);
+          
+          for (let wi = 0; wi < widthSegments; wi++) {
+            const offset = -halfWidth + wi * widthStep;
+            
+            // Add top vertex
+            const topIndex = vertices.x.length;
+            vertices.x.push(station);
+            vertices.y.push(offset);
+            vertices.z.push(elevation);
+            topVertices.push(topIndex);
+            
+            // Add bottom vertex (follows terrain)
+            const bottomIndex = vertices.x.length;
+            vertices.x.push(station);
+            vertices.y.push(offset);
+            vertices.z.push(surfaceElevation !== null ? surfaceElevation : elevation - 20);
+            bottomVertices.push(bottomIndex);
+          }
+        }
+        
+        // Function to create a triangle from three vertex indices
+        function addTriangle(v1, v2, v3) {
+          i.push(v1);
+          j.push(v2);
+          k.push(v3);
+        }
+        
+        // Create triangles for top and bottom surfaces, and sides
+        for (let si = 0; si < stationSegments - 1; si++) {
+          for (let wi = 0; wi < widthSegments - 1; wi++) {
+            // Calculate vertex indices
+            const tl = si * widthSegments + wi;
+            const tr = si * widthSegments + wi + 1;
+            const bl = (si + 1) * widthSegments + wi;
+            const br = (si + 1) * widthSegments + wi + 1;
+            
+            // Top surface triangles
+            addTriangle(topVertices[tl], topVertices[tr], topVertices[bl]);
+            addTriangle(topVertices[tr], topVertices[br], topVertices[bl]);
+            
+            // Bottom surface triangles
+            addTriangle(bottomVertices[bl], bottomVertices[tr], bottomVertices[tl]);
+            addTriangle(bottomVertices[bl], bottomVertices[br], bottomVertices[tr]);
+            
+            // Side triangles
+            // Connect top and bottom vertices
+            if (si === 0) { // Front wall
+              addTriangle(topVertices[tl], bottomVertices[tl], topVertices[tr]);
+              addTriangle(bottomVertices[tl], bottomVertices[tr], topVertices[tr]);
+            }
+            
+            if (si === stationSegments - 2) { // Back wall
+              addTriangle(topVertices[bl], topVertices[br], bottomVertices[bl]);
+              addTriangle(bottomVertices[bl], topVertices[br], bottomVertices[br]);
+            }
+            
+            if (wi === 0) { // Left wall
+              addTriangle(topVertices[tl], topVertices[bl], bottomVertices[tl]);
+              addTriangle(bottomVertices[tl], topVertices[bl], bottomVertices[bl]);
+            }
+            
+            if (wi === widthSegments - 2) { // Right wall
+              addTriangle(topVertices[tr], bottomVertices[tr], topVertices[br]);
+              addTriangle(bottomVertices[tr], bottomVertices[br], topVertices[br]);
+            }
+          }
+        }
+        
+        // Create water volume as a solid mesh
+        const waterVolume = {
+          type: 'mesh3d',
+          x: vertices.x,
+          y: vertices.y,
+          z: vertices.z,
+          i: i,
+          j: j,
+          k: k,
+          opacity: 0.7,
+          color: '#0078ff',
+          flatshading: false,
+          name: 'Water Body',
+          hoverinfo: 'text',
+          hovertext: \`\${name}<br>Elevation: \${elevation.toFixed(2)} ft<br>Station: \${beginStation.toFixed(2)} - \${endStation.toFixed(2)} ft\`,
+          showlegend: true
+        };
+        
+        return [waterVolume];
+      }
+      
+      // Function to prepare water body for 2D profile view
+      function prepareWaterBodyFor2D() {
+        console.log("prepareWaterBodyFor2D called");
+        console.log("Water body data:", waterBodyData);
+        console.log("Surface data:", surfaceData ? surfaceData.length : 'none');
+        
+        if (!waterBodyData || !surfaceData || surfaceData.length === 0) {
+          console.log("Missing water body data or surface data for 2D - using simplified water body");
+          
+          // Create a simple water body even without surface data
+          const { beginStation, endStation, elevation, name } = waterBodyData;
+          
+          // Determine appropriate bottom elevation
+          let bottomElevation = elevation - 20; // Default 20ft below water level
+          
+          // Create simplified 2D water body
+          const xPoints = [beginStation, beginStation, endStation, endStation, beginStation];
+          const yPoints = [bottomElevation, elevation, elevation, bottomElevation, bottomElevation];
+          
+          // Create simple water body trace
+          const simpleWaterBody = {
+            type: 'scatter',
+            mode: 'lines',
+            name: 'Water Body',
+            x: xPoints,
+            y: yPoints,
+            fill: 'toself',
+            fillcolor: 'rgba(0, 120, 255, 0.6)',
+            line: {
+              color: '#0078ff',
+              width: 2
+            },
+            hoverinfo: 'text',
+            hovertext: \`\${name}<br>Elevation: \${elevation.toFixed(2)} ft\`,
+            showlegend: true
+          };
+          
+          return simpleWaterBody;
+        }
+        
+        // Get water body parameters
+        const { beginStation, endStation, elevation, name } = waterBodyData;
+        
+        // Filter surface data to get points within the water body range
+        const waterBodySurfacePoints = surfaceData.filter(
+          point => point.Station >= beginStation && point.Station <= endStation
+        );
+        
+        if (waterBodySurfacePoints.length === 0) return null;
+        
+        // Sort points by station
+        const sortedPoints = [...waterBodySurfacePoints].sort((a, b) => a.Station - b.Station);
+        
+        // Create points for the closed polygon
+        // Need to make a closed shape for proper fill:
+        // 1. Start with first station at surface elevation
+        // 2. Go up to water elevation
+        // 3. Draw water level across to end station
+        // 4. Go down to surface elevation at end station
+        // 5. Follow surface back to start point
+        
+        // Create closed polygon points array
+        const xPoints = [];
+        const yPoints = [];
+        
+        // Ensure we have adequate density of points for smooth curved surfaces
+        const requiredNumPoints = Math.max(20, sortedPoints.length);
+        const stationStep = (endStation - beginStation) / (requiredNumPoints - 1);
+        
+        // Surface profile points
+        const surfaceX = [];
+        const surfaceY = [];
+        
+        // Collect points for the surface (going from end to beginning)
+        for (let i = 0; i < sortedPoints.length; i++) {
+          surfaceX.push(sortedPoints[i].Station);
+          surfaceY.push(sortedPoints[i].Elevation);
+        }
+        
+        // Create the closed path
+        // Start at first surface point
+        xPoints.push(sortedPoints[0].Station);
+        yPoints.push(sortedPoints[0].Elevation);
+        
+        // Go up to water level at start
+        xPoints.push(sortedPoints[0].Station);
+        yPoints.push(elevation);
+        
+        // Draw water level across all stations
+        for (let station = beginStation; station <= endStation; station += stationStep) {
+          xPoints.push(station);
+          yPoints.push(elevation);
+        }
+        
+        // Go down to surface at end point
+        xPoints.push(sortedPoints[sortedPoints.length - 1].Station);
+        yPoints.push(sortedPoints[sortedPoints.length - 1].Elevation);
+        
+        // Add surface points (going backwards)
+        for (let i = sortedPoints.length - 1; i >= 0; i--) {
+          xPoints.push(sortedPoints[i].Station);
+          yPoints.push(sortedPoints[i].Elevation);
+        }
+        
+        // Create water body trace
+        const waterBodyTrace = {
+          type: 'scatter',
+          mode: 'lines',
+          name: 'Water Body',
+          x: xPoints,
+          y: yPoints,
+          fill: 'toself',
+          fillcolor: 'rgba(0, 120, 255, 0.6)',
+          line: {
+            color: '#0078ff',
+            width: 2
+          },
+          hoverinfo: 'text',
+          hovertext: \`\${name}<br>Elevation: \${elevation.toFixed(2)} ft\`,
+          showlegend: true
+        };
+        
+        return waterBodyTrace;
+      }
+
       // Function to prepare boring log data for 3D visualization
       function prepareBoringLogsFor3D() {
         if (!boringLogData || boringLogData.length === 0) return [];
@@ -1243,12 +1627,13 @@ const HddGeneratorApp = () => {
           
           // Create hovertext that includes file name if available
           const hovertext = 
-            \`Station: \${log.Station}<br>\` +
-            \`Elevation: \${log.StartElevation} to \${log.EndElevation}<br>\` +
-            \`Description: \${log.SoilDescription}\` + 
-            (log.FileName ? \`<br>Source: \${log.FileName}\` : '');
+            \`Boring Log Station: \${log.Station.toFixed(2)} ft<br>\` +
+            \`Elevation: \${log.StartElevation.toFixed(2)} to \${log.EndElevation.toFixed(2)} ft<br>\` +
+            \`Soil Layer: \${log.SoilDescription}<br>\` +
+            (log.FileName ? \`File: \${log.FileName}\` : '');
           
-          const boxTrace = {
+          // Create the mesh for this boring log layer
+          const boringLogLayer = {
             type: 'mesh3d',
             x: x,
             y: y,
@@ -1258,22 +1643,23 @@ const HddGeneratorApp = () => {
             k: k,
             color: log.Color,
             opacity: 0.8,
+            name: 'Boring Log',
             hoverinfo: 'text',
             hovertext: hovertext,
-            name: 'Boring Log'
+            showlegend: false
           };
           
-          traces.push(boxTrace);
+          traces.push(boringLogLayer);
         });
         
         return traces;
       }
 
-      // Function to prepare boring log data for 2D visualization
+      // Function to prepare boring log data for 2D profile visualization
       function prepareBoringLogsFor2D() {
         if (!boringLogData || boringLogData.length === 0) return [];
         
-        // Group boring logs by station for better visualization
+        // Group boring logs by station
         const stationGroups = {};
         
         boringLogData.forEach(log => {
@@ -1285,9 +1671,11 @@ const HddGeneratorApp = () => {
         
         const traces = [];
         
-        // Create a separate trace for each station
-        Object.entries(stationGroups).forEach(([station, logs]) => {
-          // Only show boring logs that are within the HDD range
+        // Process each station
+        Object.keys(stationGroups).forEach(station => {
+          const logs = stationGroups[station];
+          
+          // Skip boring logs outside HDD range if entry/exit points exist
           if (entryPoint && exitPoint && 
               (Number(station) < entryPoint.Away || Number(station) > exitPoint.Away)) {
             return;
@@ -1296,22 +1684,35 @@ const HddGeneratorApp = () => {
           // Sort logs by elevation (highest to lowest)
           logs.sort((a, b) => b.StartElevation - a.StartElevation);
           
+          // Create rectangle for each layer
           logs.forEach(log => {
-            // For 2D profile, use the same 15' length as in 3D view
-            const halfLength = 7.5; // 15' total length, 7.5' on each side
-            
-            // Create hovertext that includes file name if available
+            // Adjust width for visualization
+            const width = 10; // 10 ft width for visibility
             const hovertext = 
-              \`Station: \${log.Station}<br>\` +
-              \`Elevation: \${log.StartElevation} to \${log.EndElevation}<br>\` +
-              \`Description: \${log.SoilDescription}\` + 
-              (log.FileName ? \`<br>Source: \${log.FileName}\` : '');
-              
+              \`Boring Log Station: \${log.Station.toFixed(2)} ft<br>\` +
+              \`Elevation: \${log.StartElevation.toFixed(2)} to \${log.EndElevation.toFixed(2)} ft<br>\` +
+              \`Soil Layer: \${log.SoilDescription}<br>\` +
+              (log.FileName ? \`File: \${log.FileName}\` : '');
+            
+            // Create filled shape for this layer using scatter
             const trace = {
               type: 'scatter',
               mode: 'lines',
-              x: [Number(station) - halfLength, Number(station) + halfLength, Number(station) + halfLength, Number(station) - halfLength, Number(station) - halfLength],
-              y: [log.StartElevation, log.StartElevation, log.EndElevation, log.EndElevation, log.StartElevation],
+              name: 'Boring Log',
+              x: [
+                Number(station) - width/2, 
+                Number(station) + width/2, 
+                Number(station) + width/2, 
+                Number(station) - width/2, 
+                Number(station) - width/2
+              ],
+              y: [
+                log.EndElevation, 
+                log.EndElevation, 
+                log.StartElevation, 
+                log.StartElevation, 
+                log.EndElevation
+              ],
               fill: 'toself',
               fillcolor: log.Color,
               line: {
@@ -1320,7 +1721,6 @@ const HddGeneratorApp = () => {
               },
               hoverinfo: 'text',
               hovertext: hovertext,
-              name: 'Boring Log',
               showlegend: false
             };
             
@@ -1447,7 +1847,24 @@ const HddGeneratorApp = () => {
           traces3D.push(surfaceTrace);
         }
 
-        // 5. Add boring log data if available and enabled
+        // 5. Add water body if enabled
+        if (waterBodyData && showWaterBody) {
+          const waterBodyTraces = prepareWaterBodyFor3D();
+          if (waterBodyTraces) {
+            if (Array.isArray(waterBodyTraces)) {
+              waterBodyTraces.forEach(trace => {
+                trace.visible = showWaterBody ? true : "legendonly";
+                traces3D.push(trace);
+              });
+            } else {
+              // Backward compatibility for old format
+              waterBodyTraces.visible = showWaterBody ? true : "legendonly";
+              traces3D.push(waterBodyTraces);
+            }
+          }
+        }
+
+        // 6. Add boring log data if available and enabled
         if (boringLogData.length > 0 && showBoringLogs) {
           const boringLogTraces = prepareBoringLogsFor3D();
           boringLogTraces.forEach(trace => {
@@ -1586,6 +2003,15 @@ const HddGeneratorApp = () => {
           };
           
           traces2D.push(surfaceProfileTrace);
+          
+          // Add water body to 2D plot if enabled
+          if (waterBodyData && showWaterBody) {
+            const waterBodyTrace2D = prepareWaterBodyFor2D();
+            if (waterBodyTrace2D) {
+              waterBodyTrace2D.visible = showWaterBody ? true : "legendonly";
+              traces2D.push(waterBodyTrace2D);
+            }
+          }
           
           // Add centerline to 2D plot
           if (entryPoint && exitPoint) {
@@ -1877,6 +2303,38 @@ const HddGeneratorApp = () => {
           // Show notification
           showNotification(showBoringLogs ? "Boring logs visible" : "Boring logs hidden");
         });
+        
+        // Toggle water body visibility
+        document.getElementById("toggleWaterBodyBtn").addEventListener("click", function () {
+          // Toggle between "yes" and "no" for consistency with React state
+          showWaterBody = showWaterBody === true ? false : true;
+          
+          // Find all water body traces in 3D plot
+          const waterBodyIndices = [];
+          Plotly.d3.select('#plot3d').selectAll('.trace').each(function(d, i) {
+            if (d.name === 'Water Body' || d.name === 'Water Surface') {
+              waterBodyIndices.push(i);
+            }
+          });
+          
+          if (waterBodyIndices.length > 0) {
+            Plotly.restyle("plot3d", { visible: showWaterBody ? true : "legendonly" }, waterBodyIndices);
+          }
+          
+          // Find all water body traces in 2D plot
+          const waterBody2DIndices = [];
+          Plotly.d3.select('#plot2d').selectAll('.trace').each(function(d, i) {
+            if (d.name === 'Water Body') {
+              waterBody2DIndices.push(i);
+            }
+          });
+          
+          if (waterBody2DIndices.length > 0) {
+            Plotly.restyle("plot2d", { visible: showWaterBody ? true : "legendonly" }, waterBody2DIndices);
+          }
+          
+          showNotification(showWaterBody ? "Water body visible" : "Water body hidden");
+        });
           
         // Zoom in button
         document.getElementById("zoomInBtn").addEventListener("click", function () {
@@ -2002,6 +2460,19 @@ const HddGeneratorApp = () => {
       setIsBoringLogReady(false);
       return true;
     },
+  };
+
+  // Handler for water body radio button change
+  const handleWaterBodyOptionChange = (e) => {
+    setShowWaterBody(e.target.value);
+  };
+
+  // Handler for water body data change
+  const handleWaterBodyDataChange = (field, value) => {
+    setWaterBodyData({
+      ...waterBodyData,
+      [field]: value,
+    });
   };
 
   const antIcon = <LoadingOutlined style={{ fontSize: 24 }} spin />;
@@ -2137,6 +2608,79 @@ const HddGeneratorApp = () => {
 
                 <Divider />
 
+                {/* Water Body Input Section - NEW */}
+                <Title level={4}>Water Body Information (Optional)</Title>
+                <Paragraph>
+                  Optionally add a water body (e.g., river, lake) to your
+                  visualization.
+                </Paragraph>
+
+                <Form layout="vertical">
+                  <Form.Item label="Include Water Body">
+                    <Radio.Group
+                      value={showWaterBody}
+                      onChange={handleWaterBodyOptionChange}
+                    >
+                      <Radio value="yes">Yes</Radio>
+                      <Radio value="no">No</Radio>
+                    </Radio.Group>
+                  </Form.Item>
+
+                  {showWaterBody === "yes" && (
+                    <>
+                      <Form.Item label="Water Body Name">
+                        <Input
+                          value={waterBodyData.name}
+                          onChange={(e) =>
+                            handleWaterBodyDataChange("name", e.target.value)
+                          }
+                          placeholder="e.g., River Crossing"
+                        />
+                      </Form.Item>
+                      <Space size="large">
+                        <Form.Item label="Begin Station (ft)">
+                          <InputNumber
+                            value={waterBodyData.beginStation}
+                            onChange={(value) =>
+                              handleWaterBodyDataChange("beginStation", value)
+                            }
+                            min={0}
+                            style={{ width: "100px" }}
+                          />
+                        </Form.Item>
+                        <Form.Item label="End Station (ft)">
+                          <InputNumber
+                            value={waterBodyData.endStation}
+                            onChange={(value) =>
+                              handleWaterBodyDataChange("endStation", value)
+                            }
+                            min={waterBodyData.beginStation}
+                            style={{ width: "100px" }}
+                          />
+                        </Form.Item>
+                        <Form.Item label="Water Elevation (ft)">
+                          <InputNumber
+                            value={waterBodyData.elevation}
+                            onChange={(value) =>
+                              handleWaterBodyDataChange("elevation", value)
+                            }
+                            style={{ width: "100px" }}
+                          />
+                        </Form.Item>
+                      </Space>
+                      <Alert
+                        message="Water Body Visualization"
+                        description="The water body will be shown from the surface to the specified water elevation. Surface data is required for proper water body visualization."
+                        type="info"
+                        showIcon
+                        className="mb-4"
+                      />
+                    </>
+                  )}
+                </Form>
+
+                <Divider />
+
                 <Title level={4}>Upload Boring Log Data (Optional)</Title>
                 <Paragraph>
                   Optionally, select one or more Excel files with boring log
@@ -2201,8 +2745,6 @@ const HddGeneratorApp = () => {
                         boringLogFileList.length !== 1 ? "s" : ""
                       }`}
                 </Button>
-
-                {/* New "Process Surface Data" button */}
                 <Button
                   type="primary"
                   onClick={processSurfaceExcelFile}
@@ -2320,6 +2862,34 @@ const HddGeneratorApp = () => {
                       </Panel>
                     )}
 
+                    {/* Water Body Data Summary - NEW */}
+                    {showWaterBody === "yes" && (
+                      <Panel header="Water Body Data" key="4">
+                        <Space direction="vertical" className="w-full">
+                          <Text>
+                            Name: <Text strong>{waterBodyData.name}</Text>
+                          </Text>
+                          <Text>
+                            Station Range:{" "}
+                            <Text strong>
+                              {waterBodyData.beginStation.toFixed(2)} ft to{" "}
+                              {waterBodyData.endStation.toFixed(2)} ft
+                            </Text>
+                          </Text>
+                          <Text>
+                            Water Elevation:{" "}
+                            <Text strong>
+                              {waterBodyData.elevation.toFixed(2)} ft
+                            </Text>
+                          </Text>
+                          <Text>
+                            The water body will be shown volumetrically from the
+                            surface to the water level.
+                          </Text>
+                        </Space>
+                      </Panel>
+                    )}
+
                     {isBoringLogReady && (
                       <Panel header="Boring Log Data" key="3">
                         <Space direction="vertical" className="w-full">
@@ -2356,7 +2926,7 @@ const HddGeneratorApp = () => {
                       </Panel>
                     )}
 
-                    <Panel header="Visualization Features" key="4">
+                    <Panel header="Visualization Features" key="5">
                       <ul className="list-disc pl-8 mb-4 text-gray-700">
                         <li>Interactive 3D bore path visualization</li>
                         <li>2D profile view of the bore path</li>
@@ -2371,6 +2941,13 @@ const HddGeneratorApp = () => {
                               Calculation of pipe depth relative to surface
                             </li>
                             <li>Centerline that follows surface elevation</li>
+                          </>
+                        )}
+                        {showWaterBody === "yes" && (
+                          <>
+                            <li>Volumetric water body visualization</li>
+                            <li>Water level at specified elevation</li>
+                            <li>Toggle water body visibility</li>
                           </>
                         )}
                         {isBoringLogReady && (
@@ -2401,6 +2978,7 @@ const HddGeneratorApp = () => {
                       setErrorMessage("");
                       setSurfaceErrorMessage("");
                       setBoringLogErrorMessage("");
+                      setShowWaterBody("no");
 
                       // Clear any visible notifications
                       const notification =
@@ -2461,8 +3039,8 @@ const HddGeneratorApp = () => {
                   </li>
                   <li>Use the zoom buttons or mouse wheel to zoom in/out</li>
                   <li>
-                    Toggle the visibility of boring logs, surface data and
-                    centerline with the buttons
+                    Toggle the visibility of boring logs, surface data,
+                    centerline, and water body with the buttons
                   </li>
                   <li>
                     View bore path depth relative to surface in the data table
@@ -2472,7 +3050,8 @@ const HddGeneratorApp = () => {
                     perspectives
                   </li>
                   <li>
-                    Hover over soil/rock layers to see detailed information
+                    Hover over soil/rock layers and water bodies to see detailed
+                    information
                   </li>
                 </ul>
 
@@ -2492,6 +3071,7 @@ const HddGeneratorApp = () => {
                       setErrorMessage("");
                       setSurfaceErrorMessage("");
                       setBoringLogErrorMessage("");
+                      setShowWaterBody("no");
 
                       // Clear any visible notifications
                       const notification =
