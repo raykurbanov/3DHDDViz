@@ -2846,75 +2846,79 @@ const HddGeneratorApp = () => {
             <Divider />
 
             {/* Water Body Input Section - NEW */}
-            <Title level={4}>Water Body Information (Optional)</Title>
-            <Paragraph>
-              Optionally add a water body (e.g., river, lake, creeks) to your
-              visualization.
-            </Paragraph>
+            {currentStep === 0 && (
+              <>
+                <Title level={4}>Water Body Information (Optional)</Title>
+                <Paragraph>
+                  Optionally add a water body (e.g., river, lake, creeks) to
+                  your visualization.
+                </Paragraph>
 
-            <Form layout="vertical">
-              <Form.Item label="Include Water Body">
-                <Radio.Group
-                  value={showWaterBody}
-                  onChange={handleWaterBodyOptionChange}
-                >
-                  <Radio value="yes">Yes</Radio>
-                  <Radio value="no">No</Radio>
-                </Radio.Group>
-              </Form.Item>
-
-              {showWaterBody === "yes" && (
-                <>
-                  <Form.Item label="Water Body Name">
-                    <Input
-                      value={waterBodyData.name}
-                      onChange={(e) =>
-                        handleWaterBodyDataChange("name", e.target.value)
-                      }
-                      placeholder="e.g., River Crossing"
-                    />
+                <Form layout="vertical">
+                  <Form.Item label="Include Water Body">
+                    <Radio.Group
+                      value={showWaterBody}
+                      onChange={handleWaterBodyOptionChange}
+                    >
+                      <Radio value="yes">Yes</Radio>
+                      <Radio value="no">No</Radio>
+                    </Radio.Group>
                   </Form.Item>
-                  <Space size="large">
-                    <Form.Item label="Begin Station (ft)">
-                      <InputNumber
-                        value={waterBodyData.beginStation}
-                        onChange={(value) =>
-                          handleWaterBodyDataChange("beginStation", value)
-                        }
-                        min={0}
-                        style={{ width: "100px" }}
+
+                  {showWaterBody === "yes" && (
+                    <>
+                      <Form.Item label="Water Body Name">
+                        <Input
+                          value={waterBodyData.name}
+                          onChange={(e) =>
+                            handleWaterBodyDataChange("name", e.target.value)
+                          }
+                          placeholder="e.g., River Crossing"
+                        />
+                      </Form.Item>
+                      <Space size="large">
+                        <Form.Item label="Begin Station (ft)">
+                          <InputNumber
+                            value={waterBodyData.beginStation}
+                            onChange={(value) =>
+                              handleWaterBodyDataChange("beginStation", value)
+                            }
+                            min={0}
+                            style={{ width: "100px" }}
+                          />
+                        </Form.Item>
+                        <Form.Item label="End Station (ft)">
+                          <InputNumber
+                            value={waterBodyData.endStation}
+                            onChange={(value) =>
+                              handleWaterBodyDataChange("endStation", value)
+                            }
+                            min={waterBodyData.beginStation}
+                            style={{ width: "100px" }}
+                          />
+                        </Form.Item>
+                        <Form.Item label="Water Elevation (ft)">
+                          <InputNumber
+                            value={waterBodyData.elevation}
+                            onChange={(value) =>
+                              handleWaterBodyDataChange("elevation", value)
+                            }
+                            style={{ width: "100px" }}
+                          />
+                        </Form.Item>
+                      </Space>
+                      <Alert
+                        message="Water Body Visualization"
+                        description="The water body will be shown from the surface to the specified water elevation. Surface data is required for proper water body visualization."
+                        type="info"
+                        showIcon
+                        className="mb-4"
                       />
-                    </Form.Item>
-                    <Form.Item label="End Station (ft)">
-                      <InputNumber
-                        value={waterBodyData.endStation}
-                        onChange={(value) =>
-                          handleWaterBodyDataChange("endStation", value)
-                        }
-                        min={waterBodyData.beginStation}
-                        style={{ width: "100px" }}
-                      />
-                    </Form.Item>
-                    <Form.Item label="Water Elevation (ft)">
-                      <InputNumber
-                        value={waterBodyData.elevation}
-                        onChange={(value) =>
-                          handleWaterBodyDataChange("elevation", value)
-                        }
-                        style={{ width: "100px" }}
-                      />
-                    </Form.Item>
-                  </Space>
-                  <Alert
-                    message="Water Body Visualization"
-                    description="The water body will be shown from the surface to the specified water elevation. Surface data is required for proper water body visualization."
-                    type="info"
-                    showIcon
-                    className="mb-4"
-                  />
-                </>
-              )}
-            </Form>
+                    </>
+                  )}
+                </Form>
+              </>
+            )}
 
             <Divider />
             {currentStep === 0 && (
