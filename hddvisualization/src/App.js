@@ -487,7 +487,7 @@ const HddGeneratorApp = () => {
           )
             headerMap["Zone End Elevation"] = index;
           else if (
-            headerStr === "Soil Description per Geotech Logs / Report" ||
+            headerStr === "Soil Description" ||
             headerStr === "Soil Description"
           )
             headerMap["Soil Description"] = index;
@@ -948,7 +948,7 @@ const HddGeneratorApp = () => {
         <button id="toggleCenterlineBtn">Toggle Centerline</button>
         <button id="toggleBoringLogsBtn">Toggle Boring Logs</button>
         <div class="soil-layer-method">
-          <label for="soilLayerMethod">Soil Layer Method:</label>
+          <label for="soilLayerMethod">Soil Layer Reading Method:</label>
           <select id="soilLayerMethod">
             <option value="depth">Depth to Surface</option>
             <option value="elevation">Elevation</option>
@@ -2696,7 +2696,7 @@ const HddGeneratorApp = () => {
         if (soilLayerMethodEl) {
           soilLayerMethodEl.addEventListener('change', function() {
             // Show notification
-            showNotification("Soil layer method changed to: " + this.value);
+            showNotification("Soil layer reading method changed to: " + this.value);
             createPlots(); // Re-create the plots with the new soil layer method
           });
         }
@@ -2848,7 +2848,7 @@ const HddGeneratorApp = () => {
             {/* Water Body Input Section - NEW */}
             <Title level={4}>Water Body Information (Optional)</Title>
             <Paragraph>
-              Optionally add a water body (e.g., river, lake) to your
+              Optionally add a water body (e.g., river, lake, creeks) to your
               visualization.
             </Paragraph>
 
@@ -2919,7 +2919,7 @@ const HddGeneratorApp = () => {
             <Divider />
             {currentStep === 0 && (
               <div>
-                <Title level={4}>Upload Bore & Surface Data</Title>
+                <Title level={4}>Upload HDD Data</Title>
                 <Paragraph>
                   Select an Excel file with HDD bore data. The file must contain
                   the following columns:
@@ -3029,7 +3029,7 @@ const HddGeneratorApp = () => {
                   <li>STA (Station)</li>
                   <li>Zone Start Elevation (ft)</li>
                   <li>Zone End Elevation (ft)</li>
-                  <li>Soil Description per Geotech Logs / Report</li>
+                  <li>Soil Description</li>
                 </ul>
 
                 <Alert
